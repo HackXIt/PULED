@@ -1,0 +1,7 @@
+# RINI Dev Environment
+.vscode
+build
+Drivers
+.mxproject
+null.d
+Makefile
