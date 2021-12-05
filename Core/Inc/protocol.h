@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 3:49:10 PM
+ *   12/5/2021, 5:27:54 PM
  * Auto updated?
  *   Yes
  *
@@ -64,34 +64,27 @@ Example-Messages:
 */
 
 // Anhand der OP-Codes ist klar definiert, wieviel Parameter und welche Parameter-Typen es gibt.
-
 // ---- Message-Struktur
 typedef struct protocol_msg
 {
     char function;        // Op-Code
     struct list *content; // Dynamisch alloziiert
-} MSG;
+} MSG_t;
 
+// NOTE: Jeder Parameter entspricht einem item in der Liste
 typedef struct list
 {
     struct link *head;
     int count;
-};
+} list_t;
 
 typedef struct link
 {
-    void *item;
     struct link *next;
-} link;
-
-// typedef struct return_MSG
-// {
-//     void param1;
-//     void param2;
-// }MSG_PARAM
+    void *item;
+} link_t;
 
 // ---- Protocol Functions
-
 /************************************************
  * @brief Generates Message struct and indirectly initializes function-content with generate_Content()
  * 
@@ -99,29 +92,21 @@ typedef struct link
  * @return MSG* 
  ***********************************************/
 
-MSG *generate_Message(void *byteArray);
+MSG_t *generate_message(void *byteArray);
 /************************************************
  * @brief Initializes a new linked-list for function-content
  * 
  * @return list* 
  ***********************************************/
-list *generate_Content();
+list_t *generate_content();
 
 /************************************************
- * @brief Serializes a message content into a sendable Byte-Array
+ * @brief Create an item object
  * 
- * @param msg 
- * @return void* 
+ * @param item reference to byteArray of item
+ * @return link_t* 
  ***********************************************/
-void *serialize_Message(MSG *msg);
-
-/************************************************
- * @brief De-serializes a Byte-Array into a new Message
- * 
- * @param byteArray 
- * @return MSG* 
- ***********************************************/
-MSG *deserialize_ByteArray(void *byteArray);
+link_t *create_item(void *item);
 
 /************************************************
  * @brief Adds an item to the function-content
@@ -130,7 +115,7 @@ MSG *deserialize_ByteArray(void *byteArray);
  * @param item 
  * @return link* 
  ***********************************************/
-link *add_item(list *content, void *item);
+link_t *add_item(list_t *content, void *item);
 
 // NOTE: Einzelne Items entfernen ist nicht implementiert, es muss immer die ganze Message verworfen werden!
 /************************************************
@@ -139,7 +124,7 @@ link *add_item(list *content, void *item);
  * @param msg 
  * @return uint8_t 
  ***********************************************/
-uint8_t clear_msg(MSG *msg);
+uint8_t clear_message(MSG_t *msg);
 
 /************************************************
  * @brief Clears the function-content from memory
@@ -147,10 +132,20 @@ uint8_t clear_msg(MSG *msg);
  * @param content 
  * @return uint8_t 
  ***********************************************/
-uint8_t clear_content(list *content);
+uint8_t clear_content(list_t *content);
 
-// Parse-Message:
-//
-// byteArray => "Asdf"|1234|"asdf"
-// param_count => 3
-// OP-Code => char* | int | char*
+/************************************************
+ * @brief Serializes a message content into a sendable Byte-Array
+ * 
+ * @param msg 
+ * @return void* 
+ ***********************************************/
+void *serialize_message(MSG_t *msg);
+
+/************************************************
+ * @brief De-serializes a received Byte-Array into a new Message
+ * 
+ * @param byteArray 
+ * @return MSG* 
+ ***********************************************/
+MSG_t *deserialize_message(void *byteArray);
