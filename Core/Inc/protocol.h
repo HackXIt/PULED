@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 5:27:54 PM
+ *   12/5/2021, 6:06:08 PM
  * Auto updated?
  *   Yes
  *
@@ -91,8 +91,8 @@ typedef struct link
  * @param byteArray The byteArray of the whole message content
  * @return MSG* 
  ***********************************************/
-
 MSG_t *generate_message(void *byteArray);
+
 /************************************************
  * @brief Initializes a new linked-list for function-content
  * 
@@ -122,17 +122,15 @@ link_t *add_item(list_t *content, void *item);
  * @brief Clears the message from memory
  * 
  * @param msg 
- * @return uint8_t 
  ***********************************************/
-uint8_t clear_message(MSG_t *msg);
+void clear_message(MSG_t *msg);
 
 /************************************************
  * @brief Clears the function-content from memory
  * 
  * @param content 
- * @return uint8_t 
  ***********************************************/
-uint8_t clear_content(list_t *content);
+void clear_content(list_t *content);
 
 /************************************************
  * @brief Serializes a message content into a sendable Byte-Array
