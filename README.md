@@ -1,4 +1,61 @@
-# Attaching a device
+# PULED
+
+## Concept
+
+
+
+## Milestones
+
+- [ ] Project README
+- [ ] Project concept
+- [x] Protocol Definitions
+- [ ] Protocol Implementation
+   - [ ] Message Generation
+   - [ ] Message Serialize
+- [ ] Basic module functionality tested
+   - [ ] Input Module
+   - [ ] Output Module
+- Project Tasks - Input Module
+   - [ ] Task *"Gut"* => IN-02
+   - [ ] Task *"Sehr gut"*  => IN-01
+- Project Tasks - Output Module
+   - [ ] Task *"Befriedigend"* => OUT-03
+   - [ ] Task *"Gut"* => OUT-02
+   - [ ] Task *"Sehr gut"* => OUT-01
+
+## Tasks
+
+### Input Module
+
+> ### Für Erreichung bis zu einem „Gut“
+>
+> Pollen Sie die aktuellen Messwerte für die Pulsmessung (mit ca 50  Hz). Geben sie diese in SI-Einheiten weiter. Überlegen Sie sich eine sinnvolle pseudo-grafische Darstellung über  UART, bei der man den Pulsverlauf (pro Herzschlag) erkennen kann.
+>
+> ### Für Erreichung bis zu einem „Sehr gut“
+>
+> Benützen Sie den Interrupt des HeartRate Click-Moduls, um ein ständiges Pollen zu vermeiden. Werten Sie den tatsächlichen Herzschlag aus!
+>
+> **Achtung! - dieser Aufgabenteil geht in Richtung Signalverarbeitung**
+
+### Output Module
+
+> ### Für Erreichung bis zu einem „Befriedigend“
+>
+> Bei diesem Modul gibt es dafür keine eingeschränkte Aufgabe.
+>
+> ### Für Erreichung bis zu einem „Gut“
+>
+> Unterstützen Sie eine mehrzeilige Textausgabe auf dem OLED.
+>
+> ### Für Erreichung bis zu einem „Sehr gut“
+>
+> Unterstützen sie automatisches Scrollen mit einer Schrittweite von einem Pixel, wenn der Text größer als der Bildschirm ist.
+
+## Side Notes
+
+### Attaching a USB device in WSL
+
+**Source:** https://devblogs.microsoft.com/commandline/connecting-usb-devices-to-wsl/
 
 First ensure a WSL command prompt is open. This will keep the WSL 2 lightweight VM active.
 
