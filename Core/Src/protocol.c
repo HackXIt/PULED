@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:57 PM
  * Last edited:
- *   12/5/2021, 7:31:07 PM
+ *   12/5/2021, 7:45:38 PM
  * Auto updated?
  *   Yes
  *
@@ -47,10 +47,10 @@ MSG_t *generate_message(uint8_t *byteArray)
     { // No parameters in byteArray, only opcode - eg. ACK, NACK, ...
         return;
     }
-    parse_byteArray(msg->content, byteArray);
+    new_msg->content = generate_content(byteArray);
     return new_msg;
 }
-list_t *generate_content()
+list_t *generate_content(uint8_t *byteArray)
 {
     list_t *new_list = (list_t *)calloc(1, sizeof(list_t));
     if (new_list == NULL)
@@ -60,6 +60,7 @@ list_t *generate_content()
     }
     else
     {
+        parse_byteArray(new_list, byteArray);
         return new_list;
     }
 }

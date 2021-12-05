@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 7:36:12 PM
+ *   12/5/2021, 7:45:07 PM
  * Auto updated?
  *   Yes
  *
@@ -98,7 +98,7 @@ MSG_t *generate_message(uint8_t *byteArray);
  * 
  * @return list* 
  ***********************************************/
-list_t *generate_content();
+list_t *generate_content(uint8_t *byteArray);
 
 /************************************************
  * @brief Parses the given byteArray and sequentially adds them to the content-list
