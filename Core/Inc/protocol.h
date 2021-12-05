@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 6:11:13 PM
+ *   12/5/2021, 6:20:05 PM
  * Auto updated?
  *   Yes
  *
@@ -91,7 +91,7 @@ typedef struct link
  * @param byteArray The byteArray of the whole message content
  * @return MSG* 
  ***********************************************/
-MSG_t *generate_message(void *byteArray);
+MSG_t *generate_message(uint8_t *byteArray);
 
 /************************************************
  * @brief Initializes a new linked-list for function-content
@@ -106,7 +106,7 @@ list_t *generate_content();
  * @param content the function-content linked-list where items are added
  * @param byteArray the byteArray to be parsed
  ***********************************************/
-void parse_byteArray(list_t *content, void *byteArray);
+void parse_byteArray(list_t *content, uint8_t *byteArray);
 
 /************************************************
  * @brief Create an item object
@@ -144,9 +144,9 @@ void clear_content(list_t *content);
  * @brief Serializes a message content into a sendable Byte-Array
  * 
  * @param msg 
- * @return void* 
+ * @return uint8_t*
  ***********************************************/
-void *serialize_message(MSG_t *msg);
+uint8_t *serialize_message(MSG_t *msg);
 
 /************************************************
  * @brief De-serializes a received Byte-Array into a new Message
@@ -154,4 +154,4 @@ void *serialize_message(MSG_t *msg);
  * @param byteArray 
  * @return MSG* 
  ***********************************************/
-MSG_t *deserialize_message(void *byteArray);
+MSG_t *deserialize_message(uint8_t *byteArray);
