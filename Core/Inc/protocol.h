@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 6:06:08 PM
+ *   12/5/2021, 6:11:13 PM
  * Auto updated?
  *   Yes
  *
@@ -99,6 +99,14 @@ MSG_t *generate_message(void *byteArray);
  * @return list* 
  ***********************************************/
 list_t *generate_content();
+
+/************************************************
+ * @brief Parses the given byteArray and sequentially adds them to the content-list
+ * 
+ * @param content the function-content linked-list where items are added
+ * @param byteArray the byteArray to be parsed
+ ***********************************************/
+void parse_byteArray(list_t *content, void *byteArray);
 
 /************************************************
  * @brief Create an item object
