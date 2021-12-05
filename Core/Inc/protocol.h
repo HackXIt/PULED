@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 6:20:05 PM
+ *   12/5/2021, 7:36:12 PM
  * Auto updated?
  *   Yes
  *
@@ -67,7 +67,7 @@ Example-Messages:
 // ---- Message-Struktur
 typedef struct protocol_msg
 {
-    char function;        // Op-Code
+    uint8_t function;     // Op-Code
     struct list *content; // Dynamisch alloziiert
 } MSG_t;
 
