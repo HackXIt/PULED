@@ -7,10 +7,10 @@
 ## Milestones
 
 - [ ] Project README
-- [ ] Project concept
+- [x] Project concept
 - [x] Protocol Definitions
-- [ ] Protocol Implementation
-   - [ ] Message Generation
+- [x] Protocol Implementation
+   - [x] Message Generation
    - [ ] Message Serialize
 - [ ] Basic module functionality tested
    - [ ] Input Module
