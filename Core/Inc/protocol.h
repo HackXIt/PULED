@@ -4,13 +4,16 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/5/2021, 7:45:07 PM
+ *   12/11/2021, 4:59:12 PM
  * Auto updated?
  *   Yes
  *
  * Description:
  *   Definitions for custom communication protocol
 **/
+
+#ifndef PROTOCOL_H
+#define PROTOCOL_H
 
 //---- Hex-Codes: 0x00 ... 0xFF
 // 0x00 ... 0x0F - Success Codes
@@ -106,7 +109,7 @@ list_t *generate_content(uint8_t *byteArray);
  * @param content the function-content linked-list where items are added
  * @param byteArray the byteArray to be parsed
  ***********************************************/
-void parse_byteArray(list_t *content, uint8_t *byteArray);
+void parse_byteArray(list_t *content, char *byteArray);
 
 /************************************************
  * @brief Create an item object
@@ -114,7 +117,7 @@ void parse_byteArray(list_t *content, uint8_t *byteArray);
  * @param item reference to byteArray of item
  * @return link_t* 
  ***********************************************/
-link_t *create_item(void *item);
+link_t *create_item(char *item);
 
 /************************************************
  * @brief Adds an item to the function-content
@@ -123,7 +126,7 @@ link_t *create_item(void *item);
  * @param item 
  * @return link* 
  ***********************************************/
-link_t *add_item(list_t *content, void *item);
+uint8_t add_item(list_t *content, char *item);
 
 // NOTE: Einzelne Items entfernen ist nicht implementiert, es muss immer die ganze Message verworfen werden!
 /************************************************
@@ -144,9 +147,9 @@ void clear_content(list_t *content);
  * @brief Serializes a message content into a sendable Byte-Array
  * 
  * @param msg 
- * @return uint8_t*
+ * @return char*
  ***********************************************/
-uint8_t *serialize_message(MSG_t *msg);
+char *serialize_message(MSG_t *msg);
 
 /************************************************
  * @brief De-serializes a received Byte-Array into a new Message
@@ -155,3 +158,5 @@ uint8_t *serialize_message(MSG_t *msg);
  * @return MSG* 
  ***********************************************/
 MSG_t *deserialize_message(uint8_t *byteArray);
+
+#endif

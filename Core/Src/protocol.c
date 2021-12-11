@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:57 PM
  * Last edited:
- *   12/5/2021, 7:45:38 PM
+ *   12/11/2021, 5:01:36 PM
  * Auto updated?
  *   Yes
  *
@@ -14,12 +14,14 @@
 
 /*--- COMMON LIBRARIES ---*/
 #include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdio.h>
 
 /*--- CUSTOM LIBRARIES ---*/
 #include "protocol.h"
 
 /*--- MACROS ---*/
-#define MAX_PARAMS 8 // We'll never have functions with more than 8 parameters
 
 // NOTE: calloc() initializes all values to NULL or 0
 
@@ -45,7 +47,7 @@ MSG_t *generate_message(uint8_t *byteArray)
     size_t bytes = sizeof(byteArray);
     if (bytes == 1)
     { // No parameters in byteArray, only opcode - eg. ACK, NACK, ...
-        return;
+        return new_msg;
     }
     new_msg->content = generate_content(byteArray);
     return new_msg;
@@ -60,41 +62,57 @@ list_t *generate_content(uint8_t *byteArray)
     }
     else
     {
-        parse_byteArray(new_list, byteArray);
+        parse_byteArray(new_list, (char *)byteArray);
         return new_list;
     }
 }
-void parse_byteArray(list_t *content, uint8_t *byteArray)
+void parse_byteArray(list_t *content, char *byteArray)
 {
-    /*
-    This function should read through the byteArray and seperate it at the delimiter.
-    Each read parameter should be allocated as a new variable and that's our item-pointer.
-    Each seperation should add an item to content.
-    I don't know how to do this yet at the moment.
-    */
+    char *token;
+    char delimiter = (char)SEP;
+    token = strtok(byteArray + 2, &delimiter);
+    while (token != NULL)
+    {
+        uint8_t status = add_item(content, token);
+        switch (status)
+        {
+        case 0:
+            token = strtok(NULL, &delimiter);
+            break;
+        case 1: // FIXME Content is NULL ??
+            break;
+        case 2: // TODO Write Out-Of-Memory Error-Message to UART for add_item status 2
+            return;
+            break;
+        }
+    }
 }
-link_t *create_item(void *item)
+link_t *create_item(char *item)
 {
     link_t *new_item = (link_t *)calloc(1, sizeof(link_t));
     if (new_item == NULL)
     {
         return NULL;
     }
-    else
+    new_item->item = malloc(sizeof(char) * strlen(item) + 1);
+    if (new_item->item == NULL)
     {
-        new_item->item = item;
+        free(new_item);
+        return NULL;
     }
+    strcpy(new_item->item, item);
+    return new_item;
 }
-link_t *add_item(list *content, void *item)
+uint8_t add_item(list_t *content, char *item)
 {
     if (content == NULL)
     {
         // TODO Write Error-Message to UART for add_item()
-        return NULL;
+        return 1;
     }
     link_t *new_item = create_item(item);
     if (new_item == NULL)
-        return NULL;
+        return 2;
     if (content->head == NULL)
     { // First item in list
         content->head = new_item;
@@ -110,6 +128,7 @@ link_t *add_item(list *content, void *item)
         tmp->next = new_item;
         content->count++;
     }
+    return 0;
 }
 void clear_message(MSG_t *msg)
 {
@@ -134,4 +153,4 @@ void clear_content(list_t *content)
     return;
 }
 // void *serialize_message(MSG_t *MSG_t);
-// MSG_t *deserialize_message(uint8_t *byteArray);
+// MSG_t *deserialize_message(char *byteArray);

@@ -22,7 +22,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "protocol.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -72,7 +73,22 @@ static void MX_TIM16_Init(void);
 int main(void)
 {
     /* USER CODE BEGIN 1 */
-
+    MSG_t *my_message;
+    link_t *current_item;
+    char testArray[] = {
+        PRINT_REQ,
+        SEP,
+        't',
+        'e',
+        's',
+        't',
+        '1',
+        SEP,
+        't',
+        'e',
+        's',
+        't',
+        '2'};
     /* USER CODE END 1 */
 
     /* MCU Configuration--------------------------------------------------------*/
@@ -98,6 +114,8 @@ int main(void)
     MX_TIM16_Init();
     /* USER CODE BEGIN 2 */
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
+
+    uint8_t *test_msg = "Hello World!!!\r\n";
     /* USER CODE END 2 */
 
     /* Infinite loop */
@@ -106,6 +124,18 @@ int main(void)
     {
         HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
         HAL_Delay(1000);
+
+        HAL_UART_Transmit(&huart2, test_msg, sizeof(char) * strlen((char *)test_msg), 50);
+
+        my_message = generate_message(testArray);
+        current_item = my_message->content->head;
+        while (current_item != NULL)
+        {
+            HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
+            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
+            HAL_Delay(1000);
+            current_item = current_item->next;
+        }
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
