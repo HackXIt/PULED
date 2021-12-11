@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:27 PM
  * Last edited:
- *   12/11/2021, 4:59:12 PM
+ *   12/11/2021, 5:28:58 PM
  * Auto updated?
  *   Yes
  *
@@ -84,17 +84,18 @@ typedef struct list
 typedef struct link
 {
     struct link *next;
-    void *item;
+    char *item;
 } link_t;
 
 // ---- Protocol Functions
 /************************************************
- * @brief Generates Message struct and indirectly initializes function-content with generate_Content()
+ * @brief De-serializes a received Byte-Array into a new Message
+ * Generates Message struct and indirectly initializes function-content with generate_Content()
  * 
  * @param byteArray The byteArray of the whole message content
  * @return MSG* 
  ***********************************************/
-MSG_t *generate_message(uint8_t *byteArray);
+MSG_t *deserialize_message(uint8_t *byteArray);
 
 /************************************************
  * @brief Initializes a new linked-list for function-content
@@ -149,14 +150,6 @@ void clear_content(list_t *content);
  * @param msg 
  * @return char*
  ***********************************************/
-char *serialize_message(MSG_t *msg);
-
-/************************************************
- * @brief De-serializes a received Byte-Array into a new Message
- * 
- * @param byteArray 
- * @return MSG* 
- ***********************************************/
-MSG_t *deserialize_message(uint8_t *byteArray);
+uint8_t *serialize_message(MSG_t *msg);
 
 #endif

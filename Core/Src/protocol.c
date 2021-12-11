@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:57 PM
  * Last edited:
- *   12/11/2021, 5:01:36 PM
+ *   12/11/2021, 5:24:25 PM
  * Auto updated?
  *   Yes
  *
@@ -27,7 +27,7 @@
 
 /* Debug-Messages written to UART when using Protocol Functions
 Out-of-Memory Errors:
-    - generate_message()
+    - deserialize_message()
     - generate_content()
     - add_item()
 Successful execution:
@@ -35,12 +35,12 @@ Successful execution:
     - clear_content()
 */
 
-MSG_t *generate_message(uint8_t *byteArray)
+MSG_t *deserialize_message(uint8_t *byteArray)
 {
     MSG_t *new_msg = (MSG_t *)calloc(1, sizeof(MSG_t));
     if (new_msg == NULL)
     {
-        // TODO Write Error-Message to UART for generate_message()
+        // TODO Write Error-Message to UART for deserialize_message()
         return NULL;
     }
     new_msg->function = (*byteArray >> 0) & 0xFF; // Get first byte for opcode
@@ -153,4 +153,3 @@ void clear_content(list_t *content)
     return;
 }
 // void *serialize_message(MSG_t *MSG_t);
-// MSG_t *deserialize_message(char *byteArray);

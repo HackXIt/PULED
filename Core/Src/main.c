@@ -75,7 +75,7 @@ int main(void)
     /* USER CODE BEGIN 1 */
     MSG_t *my_message;
     link_t *current_item;
-    char testArray[] = {
+    uint8_t testArray[] = {
         PRINT_REQ,
         SEP,
         't',
@@ -88,7 +88,8 @@ int main(void)
         'e',
         's',
         't',
-        '2'};
+        '2',
+        0x0};
     /* USER CODE END 1 */
 
     /* MCU Configuration--------------------------------------------------------*/
@@ -115,7 +116,7 @@ int main(void)
     /* USER CODE BEGIN 2 */
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
 
-    uint8_t *test_msg = "Hello World!!!\r\n";
+    char *test_msg = "Hello World!!!\r\n";
     /* USER CODE END 2 */
 
     /* Infinite loop */
@@ -125,9 +126,9 @@ int main(void)
         HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
         HAL_Delay(1000);
 
-        HAL_UART_Transmit(&huart2, test_msg, sizeof(char) * strlen((char *)test_msg), 50);
+        HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
 
-        my_message = generate_message(testArray);
+        my_message = deserialize_message(testArray);
         current_item = my_message->content->head;
         while (current_item != NULL)
         {
