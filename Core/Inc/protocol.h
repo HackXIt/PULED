@@ -15,6 +15,9 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
+//Helper Constants
+#define MIN_MSG_LENGTH 3
+
 //---- Hex-Codes: 0x00 ... 0xFF
 // 0x00 ... 0x0F - Success Codes
 #define ACK 0x00
@@ -151,5 +154,9 @@ void clear_content(list_t *content);
  * @return char*
  ***********************************************/
 uint8_t *serialize_message(MSG_t *msg);
+
+int get_length_of_message(MSG_t *msg);
+
+int copy(uint8_t *destination, char *source, int destination_start_index);
 
 #endif

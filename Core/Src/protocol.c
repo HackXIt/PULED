@@ -152,4 +152,50 @@ void clear_content(list_t *content)
     // TODO Write Success-Message to UART for clear_content()
     return;
 }
-// void *serialize_message(MSG_t *MSG_t);
+uint8_t *serialize_message(MSG_t *msg){
+    int msg_size = get_length_of_message(msg);
+    uint8_t *data = malloc(msg_size);
+    int index = 2;
+
+    data[0] = START;
+    data[1] = msg->function;
+
+    if(msg_size > MIN_MSG_LENGTH){
+        link_t *list_item = msg->content->head;
+
+        while(list_item != NULL){
+            data[index++] = SEP;
+            index = copy(data, list_item->item, index);
+            list_item = list_item->next;
+        }   
+    } 
+
+    data[msg_size - 1] = END;
+
+    clear_message(msg);
+
+    return data;
+}
+
+int get_length_of_message(MSG_t *msg){
+    link_t *list_item = msg->content->head;
+    int size = 0;
+
+    while(list_item != NULL){
+        size += strlen(list_item->item) + 1;
+        list_item = list_item->next;
+    }
+
+    return size + MIN_MSG_LENGTH;
+}
+
+int copy(uint8_t *destination, char *source, int destination_start_index){
+    int end_index = destination_start_index + strlen(source);
+
+    int i = 0;
+    for(i = destination_start_index; i < end_index; i++){
+        destination[i] = source[i - destination_start_index];  
+    }
+
+    return end_index;
+}

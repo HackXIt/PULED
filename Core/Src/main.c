@@ -24,6 +24,8 @@
 /* USER CODE BEGIN Includes */
 #include "protocol.h"
 #include "string.h"
+#include <stdlib.h>
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -137,6 +139,16 @@ int main(void)
             HAL_Delay(1000);
             current_item = current_item->next;
         }
+
+        uint8_t length = get_length_of_message(my_message);
+        char str[4];
+        sprintf(str, "%i", length);
+        HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
+        uint8_t *msg = serialize_message(my_message);
+        size_t size = strlen((char*)msg) + 1;
+        HAL_UART_Transmit(&huart2, msg, size, 50);
+        HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
+        free(msg);
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
