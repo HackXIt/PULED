@@ -23,7 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "protocol.h"
-#include "string.h"
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 /* USER CODE END Includes */
@@ -75,6 +75,18 @@ static void MX_TIM16_Init(void);
 int main(void)
 {
     /* USER CODE BEGIN 1 */
+
+    /* USER CODE END 1 */
+
+    /* MCU Configuration--------------------------------------------------------*/
+
+    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+    HAL_Init();
+
+/* USER CODE BEGIN Init */
+
+// NOTE Example Message Initialization
+#ifdef PROTOCOL_EXAMPLE
     MSG_t *my_message;
     link_t *current_item;
     uint8_t testArray[] = {
@@ -92,14 +104,7 @@ int main(void)
         't',
         '2',
         0x0};
-    /* USER CODE END 1 */
-
-    /* MCU Configuration--------------------------------------------------------*/
-
-    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
-
-    /* USER CODE BEGIN Init */
+#endif /*PROTOCOL_EXAMPLE*/
 
     /* USER CODE END Init */
 
@@ -118,7 +123,7 @@ int main(void)
     /* USER CODE BEGIN 2 */
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
 
-    char *test_msg = "Hello World!!!\r\n";
+    char *test_msg = "Hello World!\r\n";
     /* USER CODE END 2 */
 
     /* Infinite loop */
@@ -126,10 +131,14 @@ int main(void)
     while (1)
     {
         HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
-        HAL_Delay(1000);
-
         HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
+        HAL_Delay(1000);
+/* USER CODE END WHILE */
 
+/* USER CODE BEGIN 3 */
+
+// NOTE Example message deserialization & serialization
+#ifdef PROTOCOL_EXAMPLE
         my_message = deserialize_message(testArray);
         current_item = my_message->content->head;
         while (current_item != NULL)
@@ -149,9 +158,7 @@ int main(void)
         HAL_UART_Transmit(&huart2, msg, size, 50);
         HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
         free(msg);
-        /* USER CODE END WHILE */
-
-        /* USER CODE BEGIN 3 */
+#endif /*PROTOCOL_EXAMPLE*/
     }
     /* USER CODE END 3 */
 }

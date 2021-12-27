@@ -11,7 +11,7 @@
 - [x] Protocol Definitions
 - [x] Protocol Implementation
    - [x] Message Generation
-   - [ ] Message Serialize
+   - [x] Message Serialize
 - [ ] Basic module functionality tested
    - [ ] Input Module
    - [ ] Output Module
