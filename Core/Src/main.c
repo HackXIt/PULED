@@ -136,7 +136,7 @@ int main(void)
         {
             HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
             HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
-            HAL_Delay(1000);
+            // HAL_Delay(1000);
             current_item = current_item->next;
         }
 
@@ -145,7 +145,7 @@ int main(void)
         sprintf(str, "%i", length);
         HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
         uint8_t *msg = serialize_message(my_message);
-        size_t size = strlen((char*)msg) + 1;
+        size_t size = strlen((char *)msg) + 1;
         HAL_UART_Transmit(&huart2, msg, size, 50);
         HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
         free(msg);

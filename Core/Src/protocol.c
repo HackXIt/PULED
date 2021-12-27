@@ -4,7 +4,7 @@
  * Created:
  *   12/5/2021, 2:07:57 PM
  * Last edited:
- *   12/11/2021, 5:24:25 PM
+ *   December 27, 2021, 10:45:07 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -70,7 +70,11 @@ void parse_byteArray(list_t *content, char *byteArray)
 {
     char *token;
     char delimiter = (char)SEP;
-    token = strtok(byteArray + 2, &delimiter);
+    // NOTE https://stackoverflow.com/questions/16645583/how-to-copy-a-char-array-in-c
+    size_t arraySize = strlen(byteArray) + 1;
+    char *tmp_byteArray = (char *)calloc(arraySize, sizeof(char));
+    snprintf(tmp_byteArray, arraySize, "%s", byteArray);
+    token = strtok(tmp_byteArray + 2, &delimiter);
     while (token != NULL)
     {
         uint8_t status = add_item(content, token);
@@ -82,10 +86,10 @@ void parse_byteArray(list_t *content, char *byteArray)
         case 1: // FIXME Content is NULL ??
             break;
         case 2: // TODO Write Out-Of-Memory Error-Message to UART for add_item status 2
-            return;
             break;
         }
     }
+    free(tmp_byteArray);
 }
 link_t *create_item(char *item)
 {
@@ -152,7 +156,8 @@ void clear_content(list_t *content)
     // TODO Write Success-Message to UART for clear_content()
     return;
 }
-uint8_t *serialize_message(MSG_t *msg){
+uint8_t *serialize_message(MSG_t *msg)
+{
     int msg_size = get_length_of_message(msg);
     uint8_t *data = malloc(msg_size);
     int index = 2;
@@ -160,15 +165,17 @@ uint8_t *serialize_message(MSG_t *msg){
     data[0] = START;
     data[1] = msg->function;
 
-    if(msg_size > MIN_MSG_LENGTH){
+    if (msg_size > MIN_MSG_LENGTH)
+    {
         link_t *list_item = msg->content->head;
 
-        while(list_item != NULL){
+        while (list_item != NULL)
+        {
             data[index++] = SEP;
             index = copy(data, list_item->item, index);
             list_item = list_item->next;
-        }   
-    } 
+        }
+    }
 
     data[msg_size - 1] = END;
 
@@ -177,11 +184,13 @@ uint8_t *serialize_message(MSG_t *msg){
     return data;
 }
 
-int get_length_of_message(MSG_t *msg){
+int get_length_of_message(MSG_t *msg)
+{
     link_t *list_item = msg->content->head;
     int size = 0;
 
-    while(list_item != NULL){
+    while (list_item != NULL)
+    {
         size += strlen(list_item->item) + 1;
         list_item = list_item->next;
     }
@@ -189,12 +198,14 @@ int get_length_of_message(MSG_t *msg){
     return size + MIN_MSG_LENGTH;
 }
 
-int copy(uint8_t *destination, char *source, int destination_start_index){
+int copy(uint8_t *destination, char *source, int destination_start_index)
+{
     int end_index = destination_start_index + strlen(source);
 
     int i = 0;
-    for(i = destination_start_index; i < end_index; i++){
-        destination[i] = source[i - destination_start_index];  
+    for (i = destination_start_index; i < end_index; i++)
+    {
+        destination[i] = source[i - destination_start_index];
     }
 
     return end_index;
