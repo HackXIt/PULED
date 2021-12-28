@@ -22,7 +22,12 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+// NOTE Custom Library Imports
 #include "protocol.h"
+// NOTE Heartrate Module Imports
+#include "heartrate1_hal.h"
+#include "heartrate1_hw.h"
+// NOTE Standard Library Imports
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,6 +40,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// #define __MIKROC_PRO_FOR_ARM__
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,7 +56,7 @@ TIM_HandleTypeDef htim16;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+static const uint8_t MAX30100_ADDR = MAX30100_I2C_ADR << 1; // Shift left by 1 bit to make room for R/W bit
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,7 +81,9 @@ static void MX_TIM16_Init(void);
 int main(void)
 {
     /* USER CODE BEGIN 1 */
-
+    HAL_StatusTypeDef ret_val;
+    uint8_t buffer[12];
+    uint16_t value;
     /* USER CODE END 1 */
 
     /* MCU Configuration--------------------------------------------------------*/
@@ -124,15 +132,43 @@ int main(void)
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
 
     char *test_msg = "Hello World!\r\n";
+    // Delays start of actual program by 10 seconds
+    // Also prints Hello World 10 times.
+    for (uint8_t i = 0; i < 10; i++)
+    {
+        HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
+        HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
+        HAL_Delay(1000);
+    }
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
-        HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
+        buf[0] = INT_STATUS; // Read Interrupt status
+        ret_val = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR, buf, 1, HAL_MAX_DELAY);
+        if (ret != HAL_OK) // Check if everything is fine
+        {
+            strcpy((char *)buf, "Error Tx\r\n"); // Error message in case not
+        }
+        else
+        {
+            ret = HAL_I2C_Master_Receive(&hi2c1, MAX30100_ADDR, buf, 2, HAL_MAX_DELAY);
+            if (ret != HAL_OK)
+            {
+                strcpy((char *)buf, "Error Rx\r\n");
+            }
+            else
+            {
+            }
+        }
+
+        HAL_UART_Transmit(&huart2, buf, strlen((char *)buf), HAL_MAX_DELAY);
+
+        // Just wait a second
         HAL_Delay(1000);
+
 /* USER CODE END WHILE */
 
 /* USER CODE BEGIN 3 */
