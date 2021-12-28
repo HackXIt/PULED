@@ -29,22 +29,21 @@
  *
  */
 
-
 #include <stdint.h>
 #include <stdbool.h>
-#include "heartrate1_hal.h"
+#include "heartrate_hal.h"
 
-#define INT_STATUS       0x00
-#define INT_ENABLE       0x01
-#define FIFO_WRITE_PTR   0x02
-#define OVER_FLOW_CNT    0x03
-#define FIFO_READ_PTR    0x04
-#define FIFO_DATA_REG    0x05
-#define MODE_CONFIG      0x06
-#define SPO2_CONFIG      0x07
-#define LED_CONFIG       0x09
-#define TEMP_INTEGER     0x16
-#define TEMP_FRACTION    0x17
+#define INT_STATUS 0x00
+#define INT_ENABLE 0x01
+#define FIFO_WRITE_PTR 0x02
+#define OVER_FLOW_CNT 0x03
+#define FIFO_READ_PTR 0x04
+#define FIFO_DATA_REG 0x05
+#define MODE_CONFIG 0x06
+#define SPO2_CONFIG 0x07
+#define LED_CONFIG 0x09
+#define TEMP_INTEGER 0x16
+#define TEMP_FRACTION 0x17
 
 /**
  * @brief hr_shut_down
@@ -157,7 +156,7 @@ void hr_heartrate_spo2_data_ready_int_enable(bool enable);
  * @return
  * Returns the number of samples
  */
-uint8_t hr_read_diodes(uint16_t* ir_buffer, uint16_t* red_buffer);
+uint8_t hr_read_diodes(uint16_t *ir_buffer, uint16_t *red_buffer);
 /**
  * @brief hr_get_status
  * Returns the value read from the interrupt status register. The value shows which interrupts have been trigerred
@@ -169,4 +168,4 @@ uint8_t hr_get_status();
  * @brief hr_init
  * Initializes the i2c communication, activates the LEDs, enables heartrate data ready, SpO2 data ready.
  */
-void hr_init( uint8_t slave_address );
+void hr_init(uint8_t slave_address);

@@ -25,8 +25,12 @@
 // NOTE Custom Library Imports
 #include "protocol.h"
 // NOTE Heartrate Module Imports
-#include "heartrate1_hal.h"
+// #include "heartrate1_hal.h"
+// #include "heartrate1_hw.h"
+
+#define HANDLE &hi2c1
 #include "heartrate1_hw.h"
+
 // NOTE Standard Library Imports
 #include <string.h>
 #include <stdlib.h>
@@ -40,12 +44,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// #define __MIKROC_PRO_FOR_ARM__
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+// #define DataIsReady() (dataReady == 0)
+// #define DataIsNotReady() (dataReady != 0)
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -56,7 +60,7 @@ TIM_HandleTypeDef htim16;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-static const uint8_t MAX30100_ADDR = MAX30100_I2C_ADR << 1; // Shift left by 1 bit to make room for R/W bit
+// static const uint8_t MAX30100_ADDR = MAX30100_I2C_ADR << 1; // Shift left by 1 bit to make room for R/W bit
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -80,10 +84,11 @@ static void MX_TIM16_Init(void);
   */
 int main(void)
 {
+    // uint8_t dataReady;
     /* USER CODE BEGIN 1 */
-    HAL_StatusTypeDef ret_val;
-    uint8_t buffer[12];
-    uint16_t value;
+    // HAL_StatusTypeDef ret;
+    // uint8_t buf[12];
+    // uint16_t val;
     /* USER CODE END 1 */
 
     /* MCU Configuration--------------------------------------------------------*/
@@ -131,7 +136,8 @@ int main(void)
     /* USER CODE BEGIN 2 */
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
 
-    char *test_msg = "Hello World!\r\n";
+#ifdef UART_TEST
+    char *test_msg = "Hello World! \r\n";
     // Delays start of actual program by 10 seconds
     // Also prints Hello World 10 times.
     for (uint8_t i = 0; i < 10; i++)
@@ -140,63 +146,119 @@ int main(void)
         HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
         HAL_Delay(1000);
     }
+#endif /*UART_TEST*/
+
+    uint16_t ir_average;
+    uint16_t red_average;
+    char ir_string[20]; // red_string[20], time_string[20];
+    uint16_t temp_buffer_ctr;
+    uint8_t sample_num;
+    unsigned long ir_buff[16] = {0}, red_buff[16] = {0};
+    static bool first_measurement, measurement_continues;
+
+    hr_init(MAX30100_I2C_ADR);
+
+    first_measurement = true;
+    measurement_continues = false;
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        buf[0] = INT_STATUS; // Read Interrupt status
-        ret_val = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR, buf, 1, HAL_MAX_DELAY);
-        if (ret != HAL_OK) // Check if everything is fine
+        // dataReady = hr_get_status();
+        if ((hr_get_status() & 0x20) != 0)
         {
-            strcpy((char *)buf, "Error Tx\r\n"); // Error message in case not
-        }
-        else
-        {
-            ret = HAL_I2C_Master_Receive(&hi2c1, MAX30100_ADDR, buf, 2, HAL_MAX_DELAY);
-            if (ret != HAL_OK)
+            sample_num = hr_read_diodes(ir_buff, red_buff); // Read IR and RED sensor data and store it in ir_buff and red_buff
+            if (sample_num >= 1)
             {
-                strcpy((char *)buf, "Error Rx\r\n");
+                ir_average = 0;
+                red_average = 0;
+                for (temp_buffer_ctr = 0; temp_buffer_ctr < sample_num; temp_buffer_ctr++)
+                {
+                    ir_average += ir_buff[temp_buffer_ctr];
+                    red_average += red_buff[temp_buffer_ctr];
+                }
+                ir_average /= sample_num; // calculate the average value for this reading
+                red_average /= sample_num;
+                HAL_UART_Transmit(&huart2, (uint8_t *)&ir_average, sizeof(uint8_t), HAL_MAX_DELAY);
+                HAL_UART_Transmit(&huart2, (uint8_t *)&red_average, sizeof(uint8_t), HAL_MAX_DELAY);
+
+                if (ir_average > 10000)
+                {
+                    if (measurement_continues == false && first_measurement == false)
+                    {
+                        measurement_continues = true;
+                    }
+
+                    if (first_measurement == true) // if this is our first measurement, start the timer to count miliseconds
+                    {
+                        HAL_UART_Transmit(&huart2, (uint8_t *)"START\r\n", sizeof(char) * 8, HAL_MAX_DELAY);
+                        first_measurement = false;
+                    }
+                    int len = snprintf(NULL, 0, "%f", (float)ir_average);
+                    snprintf(ir_string, len + 1, "%f", (float)ir_average);
+                    strcat(ir_string, "\r\n");
+                    len = snprintf(NULL, 0, "%s", ir_string);
+                    HAL_UART_Transmit(&huart2, (uint8_t *)ir_string, len + 1, HAL_MAX_DELAY);
+                }
+                else
+                {
+                    measurement_continues = false;
+                }
+                // HAL_I2c
+                // buf[0] = INT_STATUS; // Read Interrupt status
+                // ret = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR, buf, 1, HAL_MAX_DELAY);
+                // if (ret != HAL_OK) // Check if everything is fine
+                // {
+                //     strcpy((char *)buf, "Error Tx\r\n"); // Error message in case not
+                // }
+                // else
+                // {
+                //     ret = HAL_I2C_Master_Receive(&hi2c1, MAX30100_ADDR, buf, 2, HAL_MAX_DELAY);
+                //     if (ret != HAL_OK)
+                //     {
+                //         strcpy((char *)buf, "Error Rx\r\n");
+                //     }
+                //     else
+                //     {
+                //     }
+                // }
+                // HAL_UART_Transmit(&huart2, buf, strlen((char *)buf), HAL_MAX_DELAY);
+
+                // Just wait a second
+                HAL_UART_Transmit(&huart2, (uint8_t *)"Finished cycle!\r\n", sizeof(char) * 18, HAL_MAX_DELAY);
+                HAL_Delay(1000);
             }
-            else
-            {
-            }
-        }
-
-        HAL_UART_Transmit(&huart2, buf, strlen((char *)buf), HAL_MAX_DELAY);
-
-        // Just wait a second
-        HAL_Delay(1000);
-
 /* USER CODE END WHILE */
 
 /* USER CODE BEGIN 3 */
 
 // NOTE Example message deserialization & serialization
 #ifdef PROTOCOL_EXAMPLE
-        my_message = deserialize_message(testArray);
-        current_item = my_message->content->head;
-        while (current_item != NULL)
-        {
-            HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
-            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
-            // HAL_Delay(1000);
-            current_item = current_item->next;
-        }
+            my_message = deserialize_message(testArray);
+            current_item = my_message->content->head;
+            while (current_item != NULL)
+            {
+                HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
+                HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
+                // HAL_Delay(1000);
+                current_item = current_item->next;
+            }
 
-        uint8_t length = get_length_of_message(my_message);
-        char str[4];
-        sprintf(str, "%i", length);
-        HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
-        uint8_t *msg = serialize_message(my_message);
-        size_t size = strlen((char *)msg) + 1;
-        HAL_UART_Transmit(&huart2, msg, size, 50);
-        HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
-        free(msg);
+            uint8_t length = get_length_of_message(my_message);
+            char str[4];
+            sprintf(str, "%i", length);
+            HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
+            uint8_t *msg = serialize_message(my_message);
+            size_t size = strlen((char *)msg) + 1;
+            HAL_UART_Transmit(&huart2, msg, size, 50);
+            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
+            free(msg);
 #endif /*PROTOCOL_EXAMPLE*/
+        }
+        /* USER CODE END 3 */
     }
-    /* USER CODE END 3 */
 }
 
 /**
