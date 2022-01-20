@@ -4,7 +4,7 @@
  * Created:
  *   December 28, 2021, 5:53:16 PM GMT+1
  * Last edited:
- *   December 28, 2021, 6:59:15 PM GMT+1
+ *   January 8, 2022, 3:55:05 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -22,10 +22,11 @@ Original sources can be found here: https://github.com/MikroElektronika/Click_He
 
 /*--- CUSTOM LIBRARIES ---*/
 #include "heartrate_hal.h"
+#include "main.h"
 
 // This handle must be overwritten in main.c
 #ifndef HANDLE
-#define HANDLE hi2c
+#define HANDLE NULL
 #endif
 
 /*--- Module variable definitions ---*/
@@ -49,7 +50,7 @@ void heartrate1_i2c_hal_write(uint8_t address, uint16_t num, uint8_t *buff)
 
     // HAL Library usage for transmission
 
-    ret = HAL_I2C_Master_Transmit(hi2c, (uint16_t) address, buffer, 1, HAL_MAX_DELAY));
+    ret = HAL_I2C_Master_Transmit(HANDLE, (uint16_t)address, buffer, 1, HAL_MAX_DELAY);
     if (ret != HAL_OK)
     {
         // TODO Error-Message during Transmit
@@ -69,7 +70,7 @@ void heartrate1_i2c_hal_read(uint8_t address, uint16_t num, uint8_t *buff)
 
     // HAL Library usage for transmission
 
-    ret = HAL_I2C_Master_Receive(hi2c, (uint16_t) address, buffer, 2, HAL_MAX_DELAY));
+    ret = HAL_I2C_Master_Receive(HANDLE, (uint16_t)address, buffer, 2, HAL_MAX_DELAY);
     if (ret != HAL_OK)
     {
         // TODO Error-Message during Receive

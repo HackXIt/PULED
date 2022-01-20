@@ -28,7 +28,8 @@
 // #include "heartrate1_hal.h"
 // #include "heartrate1_hw.h"
 
-#define HANDLE &hi2c1
+#define HANDLE (&hi2c1)
+
 #include "heartrate1_hw.h"
 
 // NOTE Standard Library Imports
@@ -50,6 +51,9 @@
 /* USER CODE BEGIN PM */
 // #define DataIsReady() (dataReady == 0)
 // #define DataIsNotReady() (dataReady != 0)
+
+// #define PROTOCOL_EXAMPLE
+#define UART_TEST
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -166,6 +170,7 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
+        HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin); // Just a signal of life
         // dataReady = hr_get_status();
         if ((hr_get_status() & 0x20) != 0)
         {
