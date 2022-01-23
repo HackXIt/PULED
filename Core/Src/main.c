@@ -47,6 +47,7 @@
 #define UART_TIMEOUT 30
 #define WRITE 0x00
 #define READ 0x01
+#define RESET 0x40
 
 // NOTE Registers of MAX30100
 #define INT_STATUS 0x00
@@ -60,6 +61,9 @@
 #define LED_CONFIG 0x09
 #define TEMP_INTEGER 0x16
 #define TEMP_FRACTION 0x17
+
+// NOTE Register Masks for getting specific values
+#define HR_RDY 0x20
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -76,9 +80,9 @@ TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart2;
 
-HAL_StatusTypeDef ret;
-
 /* USER CODE BEGIN PV */
+HAL_StatusTypeDef ret; // Return value for HAL Library functions
+
 // Address of MAX30100 but left-shifted to make room for R/W Bit
 // Since write is 0, the "| WRITE" is actually not necessary but is done here simply for being symmetric
 static const uint8_t MAX30100_ADDR_W = (MAX30100_I2C_ADR << 1) | WRITE;
@@ -101,6 +105,8 @@ static void MX_TIM16_Init(void);
 void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb);
 void uart_dev_log(char *log);
 void led_error_blink();
+void led_green_blink();
+void led_blue_blink();
 void led_reset();
 void read_sample();
 /* USER CODE END PFP */
@@ -124,7 +130,7 @@ int main(void)
     /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
     HAL_Init();
 
-/* USER CODE BEGIN Init */
+    /* USER CODE BEGIN Init */
 
 // NOTE Example Message Initialization
 #ifdef PROTOCOL_EXAMPLE
@@ -177,37 +183,86 @@ int main(void)
 #endif /*UART_TEST*/
 
     // Setup Heartrate Module
-    uint8_t module_setup = 0b01000010;
+    uint8_t reset_module = RESET;
+    uint8_t module_setup = 0b00000010;
     /* module_setup
     B7 == SHDN => Shutdown not enabled
     B6 == RESET => Hardware Reset Enabled
     B3 == TEMP_ENABLE => Not enabled
     B2,B1,B0 == MODE => 010 ... Heartrate only enabled
     */
+    uint8_t spo_setup = 0b00000011;
+    /* spo_setup
+    B7 == Not used
+    B6 == SPO2_HI_RES_EN
+    B5 == Reserved
+    B4,B3,B2 == SPO2_SR[2:0]
+    B1,B0 == LED_PW[1:0] => 11 ... Pulse Width = 1600us & ADC Resolution = 16 bit
+    */
+    uint8_t led_setup = 0b11111110;
+    /*
+    B7,B6,B5,B4 == RED_PA[3:0] (RED LED Current Control)
+    B3,B2,B1,B0 == IR_PA[3:0] (IR LED Current Control)
+    */
+    uint8_t interrupt_setup = 0b00100000;
+    /* interrupt setup
+    B7 == ENB_A_FULL (FIFO Almost full interrupt)
+    B6 == ENB_TEP_RDY (Temperature ready interrupt)
+    B5 == ENB_HR_RDY (Heartrate ready interrupt)
+    B4 == ENB_SO2_RDY (SpO2 Data ready interrupt)
+    B3,B2,B1,B0 == Not used / Always 0
+    */
+    // Reset the device
+    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &reset_module, sizeof(reset_module), I2C_TIMEOUT);
+    // if (ret != HAL_OK)
+    // {
+    //     led_error_blink();
+    // }
     // Write to register MODE_CONFIG using module_setup
     ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &module_setup, sizeof(module_setup), I2C_TIMEOUT);
-    if (ret != HAL_OK)
-    {
-        led_error_blink();
-    }
-    char sample_string[200];
+    // if (ret != HAL_OK)
+    // {
+    //     led_error_blink();
+    // }
+    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, LED_CONFIG, sizeof(uint8_t), &led_setup, sizeof(led_setup), I2C_TIMEOUT);
+    // if (ret != HAL_OK)
+    // {
+    //     led_error_blink();
+    // }
+    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, INT_ENABLE, sizeof(uint8_t), &interrupt_setup, sizeof(spo_setup), I2C_TIMEOUT);
+    // if (ret != HAL_OK)
+    // {
+    //     led_error_blink();
+    // }
+    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, SPO2_CONFIG, sizeof(uint8_t), &spo_setup, sizeof(spo_setup), I2C_TIMEOUT);
+    // if (ret != HAL_OK)
+    // {
+    //     led_error_blink();
+    // }
+    uart_dev_log("Completed module setup.\r\n");
+    uint8_t interrupt_status = 0x00;
+    char sample_string[40] = {};
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        // ret = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR_R, INT_STATUS, sizeof(uint8_t), I2C_TIMEOUT);
-        read_sample();
-        sprintf(sample_string, "1: %d | 2: %d | 3: %d | 4: %d\r\n",
-                current_sample[0],
-                current_sample[1],
-                current_sample[2],
-                current_sample[3]);
-        uart_dev_log(sample_string);
-/* USER CODE END WHILE */
+        HAL_I2C_Mem_Read(&hi2c1, MAX30100_ADDR_R, INT_STATUS, sizeof(uint8_t), &interrupt_status, sizeof(interrupt_status), I2C_TIMEOUT);
+        if (interrupt_status != 0)
+        {
+            read_sample();
+            sprintf(sample_string, "1: %d | 2: %d | 3: %d | 4: %d\r\n",
+                    current_sample[0],
+                    current_sample[1],
+                    current_sample[2],
+                    current_sample[3]);
+            uart_dev_log(sample_string);
+            // HAL_Delay(5000); // Wait 5 seconds after reading samples
+        }
+        /* USER CODE END WHILE */
 
-/* USER CODE BEGIN 3 */
+        /* USER CODE BEGIN 3 */
 
 // NOTE Example message deserialization & serialization
 #ifdef PROTOCOL_EXAMPLE
@@ -351,12 +406,12 @@ static void MX_TIM16_Init(void)
 
     /* USER CODE END TIM16_Init 1 */
     htim16.Instance = TIM16;
-    htim16.Init.Prescaler = 0;
+    htim16.Init.Prescaler = 32000 - 1;
     htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim16.Init.Period = 65535;
+    htim16.Init.Period = 65536 - 1;
     htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim16.Init.RepetitionCounter = 0;
-    htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+    htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
     if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
     {
         Error_Handler();
@@ -448,23 +503,20 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+    __NOP();
     if (htim == &htim16)
     {
         // Stop the timer
         HAL_TIM_Base_Stop_IT(&htim16);
         // Execute global callback if not NULL
-        if (callback != NULL)
-        {
-            (*callback)();
-        }
-        // Reset global callback variable
-        callback = NULL;
+        (*callback)();
     }
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
     __NOP(); // To be able to debug in here with breakpoints
+    // led_green_blink();
 }
 
 void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb)
@@ -500,8 +552,14 @@ void uart_dev_log(char *log)
     if (ret != HAL_OK)
     {
         // Error during transmission of log.
-        led_error_blink();
+        // led_error_blink();
     }
+}
+
+void led_green_blink()
+{
+    HAL_GPIO_WritePin(RGB_GREEN_GPIO_Port, RGB_GREEN_Pin, GPIO_PIN_RESET);
+    _tim_timeout_nonblocking_with_callback(1000, led_reset);
 }
 
 void led_error_blink()
