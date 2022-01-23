@@ -25,12 +25,7 @@
 // NOTE Custom Library Imports
 #include "protocol.h"
 // NOTE Heartrate Module Imports
-// #include "heartrate1_hal.h"
-// #include "heartrate1_hw.h"
-
-#define HANDLE (&hi2c1)
-
-#include "heartrate1_hw.h"
+#include "main.h"
 
 // NOTE Standard Library Imports
 #include <string.h>
@@ -45,12 +40,30 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// NOTE I2C definitions for MAX30100
+#define MAX_READ_SIZE 64
+#define MAX30100_I2C_ADR 0x57
+#define I2C_TIMEOUT 30
+#define UART_TIMEOUT 30
+#define WRITE 0x00
+#define READ 0x01
+
+// NOTE Registers of MAX30100
+#define INT_STATUS 0x00
+#define INT_ENABLE 0x01
+#define FIFO_WRITE_PTR 0x02
+#define OVER_FLOW_CNT 0x03
+#define FIFO_READ_PTR 0x04
+#define FIFO_DATA_REG 0x05
+#define MODE_CONFIG 0x06
+#define SPO2_CONFIG 0x07
+#define LED_CONFIG 0x09
+#define TEMP_INTEGER 0x16
+#define TEMP_FRACTION 0x17
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-// #define DataIsReady() (dataReady == 0)
-// #define DataIsNotReady() (dataReady != 0)
 
 // #define PROTOCOL_EXAMPLE
 #define UART_TEST
@@ -63,8 +76,19 @@ TIM_HandleTypeDef htim16;
 
 UART_HandleTypeDef huart2;
 
+HAL_StatusTypeDef ret;
+
 /* USER CODE BEGIN PV */
-// static const uint8_t MAX30100_ADDR = MAX30100_I2C_ADR << 1; // Shift left by 1 bit to make room for R/W bit
+// Address of MAX30100 but left-shifted to make room for R/W Bit
+// Since write is 0, the "| WRITE" is actually not necessary but is done here simply for being symmetric
+static const uint8_t MAX30100_ADDR_W = (MAX30100_I2C_ADR << 1) | WRITE;
+static const uint8_t MAX30100_ADDR_R = (MAX30100_I2C_ADR << 1) | READ;
+uint8_t current_sample[4];
+#ifndef CALLBACK
+#define CALLBACK
+typedef void (*CB)(void);
+CB callback = NULL;
+#endif
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,7 +98,11 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
-
+void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb);
+void uart_dev_log(char *log);
+void led_error_blink();
+void led_reset();
+void read_sample();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -88,11 +116,7 @@ static void MX_TIM16_Init(void);
   */
 int main(void)
 {
-    // uint8_t dataReady;
     /* USER CODE BEGIN 1 */
-    // HAL_StatusTypeDef ret;
-    // uint8_t buf[12];
-    // uint16_t val;
     /* USER CODE END 1 */
 
     /* MCU Configuration--------------------------------------------------------*/
@@ -138,13 +162,13 @@ int main(void)
     MX_I2C1_Init();
     MX_TIM16_Init();
     /* USER CODE BEGIN 2 */
-    HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET); // Turn on off RGB
+    led_reset(); // Turn on off RGB
 
 #ifdef UART_TEST
     char *test_msg = "Hello World! \r\n";
-    // Delays start of actual program by 10 seconds
-    // Also prints Hello World 10 times.
-    for (uint8_t i = 0; i < 10; i++)
+    // Delays start of actual program by 5 seconds
+    // Also prints Hello World 5 times.
+    for (uint8_t i = 0; i < 5; i++)
     {
         HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
         HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
@@ -152,116 +176,61 @@ int main(void)
     }
 #endif /*UART_TEST*/
 
-    uint16_t ir_average;
-    uint16_t red_average;
-    char ir_string[20]; // red_string[20], time_string[20];
-    uint16_t temp_buffer_ctr;
-    uint8_t sample_num;
-    unsigned long ir_buff[16] = {0}, red_buff[16] = {0};
-    static bool first_measurement, measurement_continues;
-
-    hr_init(MAX30100_I2C_ADR);
-
-    first_measurement = true;
-    measurement_continues = false;
+    // Setup Heartrate Module
+    uint8_t module_setup = 0b01000010;
+    /* module_setup
+    B7 == SHDN => Shutdown not enabled
+    B6 == RESET => Hardware Reset Enabled
+    B3 == TEMP_ENABLE => Not enabled
+    B2,B1,B0 == MODE => 010 ... Heartrate only enabled
+    */
+    // Write to register MODE_CONFIG using module_setup
+    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &module_setup, sizeof(module_setup), I2C_TIMEOUT);
+    if (ret != HAL_OK)
+    {
+        led_error_blink();
+    }
+    char sample_string[200];
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin); // Just a signal of life
-        // dataReady = hr_get_status();
-        if ((hr_get_status() & 0x20) != 0)
-        {
-            sample_num = hr_read_diodes(ir_buff, red_buff); // Read IR and RED sensor data and store it in ir_buff and red_buff
-            if (sample_num >= 1)
-            {
-                ir_average = 0;
-                red_average = 0;
-                for (temp_buffer_ctr = 0; temp_buffer_ctr < sample_num; temp_buffer_ctr++)
-                {
-                    ir_average += ir_buff[temp_buffer_ctr];
-                    red_average += red_buff[temp_buffer_ctr];
-                }
-                ir_average /= sample_num; // calculate the average value for this reading
-                red_average /= sample_num;
-                HAL_UART_Transmit(&huart2, (uint8_t *)&ir_average, sizeof(uint8_t), HAL_MAX_DELAY);
-                HAL_UART_Transmit(&huart2, (uint8_t *)&red_average, sizeof(uint8_t), HAL_MAX_DELAY);
-
-                if (ir_average > 10000)
-                {
-                    if (measurement_continues == false && first_measurement == false)
-                    {
-                        measurement_continues = true;
-                    }
-
-                    if (first_measurement == true) // if this is our first measurement, start the timer to count miliseconds
-                    {
-                        HAL_UART_Transmit(&huart2, (uint8_t *)"START\r\n", sizeof(char) * 8, HAL_MAX_DELAY);
-                        first_measurement = false;
-                    }
-                    int len = snprintf(NULL, 0, "%f", (float)ir_average);
-                    snprintf(ir_string, len + 1, "%f", (float)ir_average);
-                    strcat(ir_string, "\r\n");
-                    len = snprintf(NULL, 0, "%s", ir_string);
-                    HAL_UART_Transmit(&huart2, (uint8_t *)ir_string, len + 1, HAL_MAX_DELAY);
-                }
-                else
-                {
-                    measurement_continues = false;
-                }
-                // HAL_I2c
-                // buf[0] = INT_STATUS; // Read Interrupt status
-                // ret = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR, buf, 1, HAL_MAX_DELAY);
-                // if (ret != HAL_OK) // Check if everything is fine
-                // {
-                //     strcpy((char *)buf, "Error Tx\r\n"); // Error message in case not
-                // }
-                // else
-                // {
-                //     ret = HAL_I2C_Master_Receive(&hi2c1, MAX30100_ADDR, buf, 2, HAL_MAX_DELAY);
-                //     if (ret != HAL_OK)
-                //     {
-                //         strcpy((char *)buf, "Error Rx\r\n");
-                //     }
-                //     else
-                //     {
-                //     }
-                // }
-                // HAL_UART_Transmit(&huart2, buf, strlen((char *)buf), HAL_MAX_DELAY);
-
-                // Just wait a second
-                HAL_UART_Transmit(&huart2, (uint8_t *)"Finished cycle!\r\n", sizeof(char) * 18, HAL_MAX_DELAY);
-                HAL_Delay(1000);
-            }
+        // ret = HAL_I2C_Master_Transmit(&hi2c1, MAX30100_ADDR_R, INT_STATUS, sizeof(uint8_t), I2C_TIMEOUT);
+        read_sample();
+        sprintf(sample_string, "1: %d | 2: %d | 3: %d | 4: %d\r\n",
+                current_sample[0],
+                current_sample[1],
+                current_sample[2],
+                current_sample[3]);
+        uart_dev_log(sample_string);
 /* USER CODE END WHILE */
 
 /* USER CODE BEGIN 3 */
 
 // NOTE Example message deserialization & serialization
 #ifdef PROTOCOL_EXAMPLE
-            my_message = deserialize_message(testArray);
-            current_item = my_message->content->head;
-            while (current_item != NULL)
-            {
-                HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
-                HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
-                // HAL_Delay(1000);
-                current_item = current_item->next;
-            }
-
-            uint8_t length = get_length_of_message(my_message);
-            char str[4];
-            sprintf(str, "%i", length);
-            HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
-            uint8_t *msg = serialize_message(my_message);
-            size_t size = strlen((char *)msg) + 1;
-            HAL_UART_Transmit(&huart2, msg, size, 50);
+        my_message = deserialize_message(testArray);
+        current_item = my_message->content->head;
+        while (current_item != NULL)
+        {
+            HAL_UART_Transmit(&huart2, (uint8_t *)current_item->item, sizeof(char) * strlen((char *)current_item->item), 50);
             HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
-            free(msg);
-#endif /*PROTOCOL_EXAMPLE*/
+            // HAL_Delay(1000);
+            current_item = current_item->next;
         }
+
+        uint8_t length = get_length_of_message(my_message);
+        char str[4];
+        sprintf(str, "%i", length);
+        HAL_UART_Transmit(&huart2, (uint8_t *)str, sizeof(char) * strlen(str), 50);
+        uint8_t *msg = serialize_message(my_message);
+        size_t size = strlen((char *)msg) + 1;
+        HAL_UART_Transmit(&huart2, msg, size, 50);
+        HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
+        free(msg);
+#endif /*PROTOCOL_EXAMPLE*/
         /* USER CODE END 3 */
     }
 }
@@ -477,7 +446,85 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &htim16)
+    {
+        // Stop the timer
+        HAL_TIM_Base_Stop_IT(&htim16);
+        // Execute global callback if not NULL
+        if (callback != NULL)
+        {
+            (*callback)();
+        }
+        // Reset global callback variable
+        callback = NULL;
+    }
+}
 
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    __NOP(); // To be able to debug in here with breakpoints
+}
+
+void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb)
+{
+    callback = cb; // Set global function pointer variable to callback
+    // Activate flag for doing action in main loop
+    // Not used here
+    // callback_flag = 1;
+
+    // Set autoreload to specified milliseconds
+    // This assumes that the configuration is set to have 1ms per tick
+    __HAL_TIM_SET_AUTORELOAD(&htim16, ms);
+    // Set counter to 0 for sanity (redundant - just making sure)
+    __HAL_TIM_SET_COUNTER(&htim16, 0);
+    // Event generation register => Update generation (Reinitialize counter & update registers)
+    TIM16->EGR = 1;
+    // Status register => Reset Update Interrupt Flag (Because it was set by EGR - line above)
+    // Barebone: TIM16->SR &= 0
+    __HAL_TIM_CLEAR_FLAG(&htim16, TIM_FLAG_UPDATE);
+    HAL_TIM_Base_Start_IT(&htim16);
+}
+
+void uart_dev_log(char *log)
+{
+    if (log == NULL)
+    {
+        return;
+    }
+    HAL_StatusTypeDef ret;
+    uint16_t len = (sizeof(char) * strlen(log)) + 1;
+
+    ret = HAL_UART_Transmit_IT(&huart2, (uint8_t *)log, len);
+    if (ret != HAL_OK)
+    {
+        // Error during transmission of log.
+        led_error_blink();
+    }
+}
+
+void led_error_blink()
+{
+    HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_RESET);
+    _tim_timeout_nonblocking_with_callback(1000, led_reset);
+}
+
+void led_reset()
+{
+    HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET);
+}
+// *uint8_t read_sample()
+void read_sample()
+{
+    // uint8_t sample[4]; // One sample consists of 4 Byte
+    // We need to read from the device 4 times in order to read a whole FIFO
+    for (int i = 0; i < 4; i++)
+    {
+        HAL_I2C_Mem_Read(&hi2c1, MAX30100_ADDR_R, FIFO_DATA_REG, sizeof(uint8_t), &current_sample[i], sizeof(uint8_t), I2C_TIMEOUT);
+    }
+    // return sample;
+}
 /* USER CODE END 4 */
 
 /**

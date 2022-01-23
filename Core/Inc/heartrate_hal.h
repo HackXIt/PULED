@@ -4,7 +4,7 @@
  * Created:
  *   December 28, 2021, 5:52:16 PM GMT+1
  * Last edited:
- *   December 28, 2021, 6:59:29 PM GMT+1
+ *   January 23, 2022, 12:36:58 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -24,6 +24,7 @@ Original sources can be found here: https://github.com/MikroElektronika/Click_He
 #include <stdint.h>
 
 /*--- CUSTOM LIBRARIES ---*/
+#include "stm32l4xx_hal.h"
 
 /*--- MACROS ---*/
 #define WRITE 0
@@ -34,11 +35,11 @@ Original sources can be found here: https://github.com/MikroElektronika/Click_He
 
 //---- Function prototypes
 
-/**
+/**Tut
  * @brief Initializes i2c module
  * @param address_id - slave device address
  */
-int heartrate1_i2c_init( uint8_t address_id );
+int8_t heartrate1_i2c_init( uint8_t address_id, I2C_HandleTypeDef i2c_handle, UART_HandleTypeDef uart_handle);
 
 /**
  * @brief Writes data through the i2c line
@@ -55,5 +56,17 @@ void heartrate1_i2c_hal_write( uint8_t address, uint16_t num, uint8_t *buff );
  * @param buff    - buffer to where the read bytes will be stored
  */
 void heartrate1_i2c_hal_read(  uint8_t address, uint16_t num, uint8_t *buff );
+
+/************************************************
+ * @brief Logging function which writes to UART
+ * Needs to be improved because it currently delays the program significantly
+ ***********************************************/
+void uart_dev_log(uint8_t *log);
+
+/************************************************
+ * @brief Turns on the RED RGB Led to signal a transmission error has occured
+ * 
+ ***********************************************/
+void led_error_blink();
 
 #endif /* HEARTRATE_HAL_H */

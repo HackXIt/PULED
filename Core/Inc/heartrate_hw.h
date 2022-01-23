@@ -168,4 +168,4 @@ uint8_t hr_get_status();
  * @brief hr_init
  * Initializes the i2c communication, activates the LEDs, enables heartrate data ready, SpO2 data ready.
  */
-void hr_init(uint8_t slave_address);
+void hr_init(uint8_t slave_address, I2C_HandleTypeDef i2c_handle, UART_HandleTypeDef uart_handle);
