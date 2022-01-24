@@ -42,7 +42,8 @@
 /* USER CODE BEGIN PD */
 // NOTE I2C definitions for MAX30100
 #define MAX_READ_SIZE 64
-#define MAX30100_I2C_ADR 0x57
+// #define MAX30100_I2C_ADR 0xAE
+#define SETUP_DELAY 20
 #define I2C_TIMEOUT 30
 #define UART_TIMEOUT 30
 #define WRITE 0x00
@@ -85,8 +86,8 @@ HAL_StatusTypeDef ret; // Return value for HAL Library functions
 
 // Address of MAX30100 but left-shifted to make room for R/W Bit
 // Since write is 0, the "| WRITE" is actually not necessary but is done here simply for being symmetric
-static const uint8_t MAX30100_ADDR_W = (MAX30100_I2C_ADR << 1) | WRITE;
-static const uint8_t MAX30100_ADDR_R = (MAX30100_I2C_ADR << 1) | READ;
+static const uint8_t MAX30100_ADDR_W = 0xAE;
+static const uint8_t MAX30100_ADDR_R = 0xAF;
 uint8_t current_sample[4];
 #ifndef CALLBACK
 #define CALLBACK
@@ -218,27 +219,32 @@ int main(void)
     // {
     //     led_error_blink();
     // }
+    HAL_Delay(SETUP_DELAY);
     // Write to register MODE_CONFIG using module_setup
     ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &module_setup, sizeof(module_setup), I2C_TIMEOUT);
     // if (ret != HAL_OK)
     // {
     //     led_error_blink();
     // }
+    HAL_Delay(SETUP_DELAY);
     ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, LED_CONFIG, sizeof(uint8_t), &led_setup, sizeof(led_setup), I2C_TIMEOUT);
     // if (ret != HAL_OK)
     // {
     //     led_error_blink();
     // }
+    HAL_Delay(SETUP_DELAY);
     ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, INT_ENABLE, sizeof(uint8_t), &interrupt_setup, sizeof(spo_setup), I2C_TIMEOUT);
     // if (ret != HAL_OK)
     // {
     //     led_error_blink();
     // }
+    HAL_Delay(SETUP_DELAY);
     ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, SPO2_CONFIG, sizeof(uint8_t), &spo_setup, sizeof(spo_setup), I2C_TIMEOUT);
     // if (ret != HAL_OK)
     // {
     //     led_error_blink();
     // }
+    HAL_Delay(SETUP_DELAY);
     uart_dev_log("Completed module setup.\r\n");
     uint8_t interrupt_status = 0x00;
     char sample_string[40] = {};
