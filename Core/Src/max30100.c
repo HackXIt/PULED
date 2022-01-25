@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:21:13 PM GMT+1
  * Last edited:
- *   January 25, 2022, 11:45:31 PM GMT+1
+ *   January 26, 2022, 12:35:02 AM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -13,6 +13,8 @@
 **/
 
 /*--- COMMON LIBRARIES ---*/
+#include <stdio.h>
+#include <stdlib.h>
 
 /*--- CUSTOM LIBRARIES ---*/
 #include "max30100.h"
@@ -23,8 +25,6 @@
 // #define SPO2_MODE
 
 /*--- Global variables ---*/
-uint16_t ir_samples[MAX_SAMPLES];
-uint16_t red_samples[MAX_SAMPLES];
 
 /* -------- INITIALIZATION -------- */
 
@@ -32,8 +32,8 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
 {
     /* NOTE Set structure parameters to initial values */
     sensor->i2c_handle = i2c_handle;
-    sensor->IR_data = 0x00;
-    sensor->RED_data = 0x00;
+    // sensor->IR_data = {{0}};
+    // sensor->RED_data = {{0}};
     sensor->temperature = 0.0f;
 
     /* NOTE Function variables for storage */
@@ -120,8 +120,10 @@ HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor)
     uint8_t temp_ready = 0x00;
     int8_t temperature = 0x00;
     uint8_t fraction = 0x00;
-    status[0] = MAX30100_write_register(sensor, MODE_CONFIG, MODE_TEMP_EN); // Initiate temperature reading
-    uint8_t interrupt_error_counter = 0 do                                  // Wait for temperature reading to be ready
+    uint8_t data = MODE_TEMP_EN;
+    status[0] = MAX30100_write_register(sensor, MODE_CONFIG, &data); // Initiate temperature reading
+    uint8_t interrupt_error_counter = 0;
+    do // Wait for temperature reading to be ready
     {
         // Using status[4] since an error in temperature reading is more important and therefor prioritized
         // Read interrupt status flag
@@ -131,10 +133,8 @@ HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor)
         // Ignore all bits other than TEMP_READY
         temp_ready &= TEMP_READY;
         // Loop until temperature is ready or communication failed 20 times in total
-    }
-    while (!temp_ready && interrupt_error_counter <= 20)
-        ;
-    status[1] = MAX30100_read_register(sensor, TEMP_INTEGER, &temperature);
+    } while (!temp_ready && interrupt_error_counter <= 20);
+    status[1] = MAX30100_read_register(sensor, TEMP_INTEGER, (uint8_t *)&temperature);
     status[2] = MAX30100_read_register(sensor, TEMP_FRACTION, &fraction);
     fraction &= 0x07; // Ignoring all other fraction bits, if wrongly set.
     sensor->temperature = (float)temperature + (fraction * 0.0625);
@@ -153,8 +153,7 @@ HAL_StatusTypeDef MAX30100_read_samples(MAX30100 *sensor)
     uint8_t sample_number = 0;
     uint8_t writePtr = 0;
     uint8_t readPtr = 0;
-    uint8_t samples[MAX_SAMPLES] = {0}; // All samples
-    uint8_t sample[4];                  // Currently read samples
+    uint8_t sample[4]; // Currently read samples
     HAL_StatusTypeDef status;
 
     // Get current pointers of samples
@@ -168,14 +167,15 @@ HAL_StatusTypeDef MAX30100_read_samples(MAX30100 *sensor)
         for (int i = 0; i < sample_number; i++)
         { // i == sample
             // Read one sample
-            status = MAX30100_read_registers(sensor, FIFO_DATA_REG, &sample, SAMPLE_SIZE);
+            status = MAX30100_read_registers(sensor, FIFO_DATA_REG, sample, SAMPLE_SIZE);
 
-            ir_samples[i] = (uint16_t)sample[1];        // Save lower-half of sample IR[7:0]
-            ir_samples[i] |= (uint16_t)sample[0] << 8;  // Shift upper-half of sample IR[15:8]
-            red_samples[i] = (uint16_t)sample[3];       // Save lower-half of sample RED[7:0]
-            red_samples[i] |= (uint16_t)sample[2] << 8; // Shift upper-half of sample RED[15:8]
+            sensor->IR_data[i] = (uint16_t)sample[1];        // Save lower-half of sample IR[7:0]
+            sensor->IR_data[i] |= (uint16_t)sample[0] << 8;  // Shift upper-half of sample IR[15:8]
+            sensor->RED_data[i] = (uint16_t)sample[3];       // Save lower-half of sample RED[7:0]
+            sensor->RED_data[i] |= (uint16_t)sample[2] << 8; // Shift upper-half of sample RED[15:8]
         }
     }
+    return status;
 }
 
 /* -------- ABSTRACTION FUNCTIONS -------- */

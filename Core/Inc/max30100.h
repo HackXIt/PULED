@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:20:44 PM GMT+1
  * Last edited:
- *   January 25, 2022, 11:50:52 PM GMT+1
+ *   January 26, 2022, 12:29:45 AM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -96,7 +96,7 @@
 #define SAMPLE_RATE_400 0x04 // 100 - 400 samples per second
 #define SAMPLE_RATE_600 0x05 // 101 - 600 samples per second
 #define SAMPLE_RATE_800 0x06 // 110 - 800 samples per second
-#define SAMPLE_RATE_100 0x07 // 111 - 1000 samples per second
+#define SAMPLE_RATE_1000 0x07 // 111 - 1000 samples per second
 // NOTE Pulse Width Control - Configuration Masks
 #define LED_PW 0x03 // B1, B0 - LED Pulse Width Control [1:0]
 #define PULSE_WIDTH_200 0x00 // 00 - Pulse Width 200us + 13 ADC Resolution Bits
