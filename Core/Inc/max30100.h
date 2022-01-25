@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:20:44 PM GMT+1
  * Last edited:
- *   January 25, 2022, 11:38:37 PM GMT+1
+ *   January 25, 2022, 11:50:52 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -120,9 +120,9 @@
 /* NOTE Sensor Datastructure holding information */
 typedef struct {
     I2C_HandleTypeDef *i2c_handle;
-    uint16_t IR_data; // One sample of IR data
-    uint16_t RED_data; // One sample of RED data
-    float temperature; // Temp_Integer + Temp_Fraction
+    uint16_t IR_data[MAX_SAMPLES]; // All infrared ADC samples
+    uint16_t RED_data[MAX_SAMPLES]; // All red led ADC samples
+    float temperature; // Converted temperature reading according to formula
 } MAX30100;
 
 typedef enum {

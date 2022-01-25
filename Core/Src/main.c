@@ -22,10 +22,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
 // NOTE Custom Library Imports
 #include "protocol.h"
 // NOTE Heartrate Module Imports
-#include "main.h"
+#include "max30100.h"
 
 // NOTE Standard Library Imports
 #include <string.h>
@@ -40,31 +41,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-// NOTE I2C definitions for MAX30100
-#define MAX_READ_SIZE 64
-// #define MAX30100_I2C_ADR 0xAE
-#define SETUP_DELAY 20
-#define I2C_TIMEOUT 30
-#define UART_TIMEOUT 30
-#define WRITE 0x00
-#define READ 0x01
-#define RESET 0x40
 
-// NOTE Registers of MAX30100
-#define INT_STATUS 0x00
-#define INT_ENABLE 0x01
-#define FIFO_WRITE_PTR 0x02
-#define OVER_FLOW_CNT 0x03
-#define FIFO_READ_PTR 0x04
-#define FIFO_DATA_REG 0x05
-#define MODE_CONFIG 0x06
-#define SPO2_CONFIG 0x07
-#define LED_CONFIG 0x09
-#define TEMP_INTEGER 0x16
-#define TEMP_FRACTION 0x17
-
-// NOTE Register Masks for getting specific values
-#define HR_RDY 0x20
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -82,13 +59,9 @@ TIM_HandleTypeDef htim16;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-HAL_StatusTypeDef ret; // Return value for HAL Library functions
-
-// Address of MAX30100 but left-shifted to make room for R/W Bit
-// Since write is 0, the "| WRITE" is actually not necessary but is done here simply for being symmetric
-static const uint8_t MAX30100_ADDR_W = 0xAE;
-static const uint8_t MAX30100_ADDR_R = 0xAF;
-uint8_t current_sample[4];
+MAX30100 heartrate_sensor;
+uint8_t init_status = 0x00;
+uint8_t current_status = 0x00;
 #ifndef CALLBACK
 #define CALLBACK
 typedef void (*CB)(void);
@@ -174,7 +147,7 @@ int main(void)
 #ifdef UART_TEST
     char *test_msg = "Hello World! \r\n";
     // Delays start of actual program by 5 seconds
-    // Also prints Hello World 5 times.
+    // Also prints Hello World 5 times & blinks led with each print.
     for (uint8_t i = 0; i < 5; i++)
     {
         HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
@@ -183,89 +156,51 @@ int main(void)
     }
 #endif /*UART_TEST*/
 
-    // Setup Heartrate Module
-    uint8_t reset_module = RESET;
-    uint8_t module_setup = 0b00000010;
-    /* module_setup
-    B7 == SHDN => Shutdown not enabled
-    B6 == RESET => Hardware Reset Enabled
-    B3 == TEMP_ENABLE => Not enabled
-    B2,B1,B0 == MODE => 010 ... Heartrate only enabled
-    */
-    uint8_t spo_setup = 0b00000011;
-    /* spo_setup
-    B7 == Not used
-    B6 == SPO2_HI_RES_EN
-    B5 == Reserved
-    B4,B3,B2 == SPO2_SR[2:0]
-    B1,B0 == LED_PW[1:0] => 11 ... Pulse Width = 1600us & ADC Resolution = 16 bit
-    */
-    uint8_t led_setup = 0b11111110;
-    /*
-    B7,B6,B5,B4 == RED_PA[3:0] (RED LED Current Control)
-    B3,B2,B1,B0 == IR_PA[3:0] (IR LED Current Control)
-    */
-    uint8_t interrupt_setup = 0b00100000;
-    /* interrupt setup
-    B7 == ENB_A_FULL (FIFO Almost full interrupt)
-    B6 == ENB_TEP_RDY (Temperature ready interrupt)
-    B5 == ENB_HR_RDY (Heartrate ready interrupt)
-    B4 == ENB_SO2_RDY (SpO2 Data ready interrupt)
-    B3,B2,B1,B0 == Not used / Always 0
-    */
-    // Reset the device
-    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &reset_module, sizeof(reset_module), I2C_TIMEOUT);
-    // if (ret != HAL_OK)
-    // {
-    //     led_error_blink();
-    // }
-    HAL_Delay(SETUP_DELAY);
-    // Write to register MODE_CONFIG using module_setup
-    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, MODE_CONFIG, sizeof(uint8_t), &module_setup, sizeof(module_setup), I2C_TIMEOUT);
-    // if (ret != HAL_OK)
-    // {
-    //     led_error_blink();
-    // }
-    HAL_Delay(SETUP_DELAY);
-    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, LED_CONFIG, sizeof(uint8_t), &led_setup, sizeof(led_setup), I2C_TIMEOUT);
-    // if (ret != HAL_OK)
-    // {
-    //     led_error_blink();
-    // }
-    HAL_Delay(SETUP_DELAY);
-    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, INT_ENABLE, sizeof(uint8_t), &interrupt_setup, sizeof(spo_setup), I2C_TIMEOUT);
-    // if (ret != HAL_OK)
-    // {
-    //     led_error_blink();
-    // }
-    HAL_Delay(SETUP_DELAY);
-    ret = HAL_I2C_Mem_Write(&hi2c1, MAX30100_ADDR_W, SPO2_CONFIG, sizeof(uint8_t), &spo_setup, sizeof(spo_setup), I2C_TIMEOUT);
-    // if (ret != HAL_OK)
-    // {
-    //     led_error_blink();
-    // }
-    HAL_Delay(SETUP_DELAY);
-    uart_dev_log("Completed module setup.\r\n");
-    uint8_t interrupt_status = 0x00;
-    char sample_string[40] = {};
+    init_status = MAX30100_initialize(&heartrate_sensor, &hi2c1);
+    switch (init_status) // Check & Handle init_status of initialization
+    {
+    case REVISION_FAILED:
+        uart_dev_log("Communication error: Receiving revision number failed...");
+        break;
+    case REVISION_FALSE:
+        uart_dev_log("Incompatible sensor: Sensor has wrong revision number...");
+        break;
+    case PART_ID_FAILED:
+        uart_dev_log("Communication error: Receiving sensor Part-ID failed...");
+        break;
+    case PART_ID_FALSE:
+        uart_dev_log("Incompatible sensor: Sensor has wrong Part-ID...");
+        break;
+    case RESET_FAILED:
+        uart_dev_log("Communication error: Resetting sensor failed...");
+        break;
+    case CONFIG_FAILED:
+        uart_dev_log("Communication error: Configuring sensor mode failed...");
+        break;
+    case SPO2_CONFIG_FAILED:
+        uart_dev_log("Communication error: Sensor SPO2 configuration failed...");
+        break;
+    case INITIAL_TEMP_FAILED:
+        uart_dev_log("Communication error: Receiving initial temperature reading failed...");
+        break;
+    case LED_CONFIG_FAILED:
+        uart_dev_log("Communication error: Configuring sensor LEDs failed...");
+        break;
+    case INTERRUPT_CONFIG_FAILED:
+        uart_dev_log("Communication error: Configuring sensor interrupts failed...");
+        break;
+    default:
+        uart_dev_log("MAX30100 sensor completed initialization.");
+        break;
+    }
+    HAL_I2C_Mem_Read_IT(&hi2c1, MAX30100_I2C_READ, INT_STATUS, sizeof(uint8_t), &current_status, sizeof(uint8_t));
     /* USER CODE END 2 */
 
     /* Infinite loop */
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        HAL_I2C_Mem_Read(&hi2c1, MAX30100_ADDR_R, INT_STATUS, sizeof(uint8_t), &interrupt_status, sizeof(interrupt_status), I2C_TIMEOUT);
-        if (interrupt_status != 0)
-        {
-            read_sample();
-            sprintf(sample_string, "1: %d | 2: %d | 3: %d | 4: %d\r\n",
-                    current_sample[0],
-                    current_sample[1],
-                    current_sample[2],
-                    current_sample[3]);
-            uart_dev_log(sample_string);
-            // HAL_Delay(5000); // Wait 5 seconds after reading samples
-        }
+        // TODO Implement something in MAIN
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
@@ -292,8 +227,8 @@ int main(void)
         HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", sizeof(char) * strlen("\r\n"), 50);
         free(msg);
 #endif /*PROTOCOL_EXAMPLE*/
-        /* USER CODE END 3 */
     }
+    /* USER CODE END 3 */
 }
 
 /**
@@ -326,7 +261,7 @@ void SystemClock_Config(void)
     RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
     RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
     RCC_OscInitStruct.PLL.PLLM = 1;
-    RCC_OscInitStruct.PLL.PLLN = 40;
+    RCC_OscInitStruct.PLL.PLLN = 16;
     RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
     RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
     RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
@@ -342,7 +277,7 @@ void SystemClock_Config(void)
     RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
     RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
     {
         Error_Handler();
     }
@@ -367,7 +302,7 @@ static void MX_I2C1_Init(void)
 
     /* USER CODE END I2C1_Init 1 */
     hi2c1.Instance = I2C1;
-    hi2c1.Init.Timing = 0x10909CEC;
+    hi2c1.Init.Timing = 0x00707CBB;
     hi2c1.Init.OwnAddress1 = 0;
     hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
     hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -507,6 +442,14 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_I2C_RxCpltCallback(I2C_HandleTypeDef *i2c_handle)
+{
+    if (i2c_handle == &hi2c1)
+    {
+        // TODO Implement callback of I2C handler
+    }
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     __NOP();
@@ -519,9 +462,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    __NOP(); // To be able to debug here with breakpoints
+}
+
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-    __NOP(); // To be able to debug in here with breakpoints
+    __NOP(); // To be able to debug here with breakpoints
     // led_green_blink();
 }
 
@@ -557,11 +505,9 @@ void uart_dev_log(char *log)
     ret = HAL_UART_Transmit_IT(&huart2, (uint8_t *)log, len);
     if (ret != HAL_OK)
     {
-        // Error during transmission of log.
-        // led_error_blink();
+        Error_Handler();
     }
 }
-
 void led_green_blink()
 {
     HAL_GPIO_WritePin(RGB_GREEN_GPIO_Port, RGB_GREEN_Pin, GPIO_PIN_RESET);
@@ -578,17 +524,6 @@ void led_reset()
 {
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET);
 }
-// *uint8_t read_sample()
-void read_sample()
-{
-    // uint8_t sample[4]; // One sample consists of 4 Byte
-    // We need to read from the device 4 times in order to read a whole FIFO
-    for (int i = 0; i < 4; i++)
-    {
-        HAL_I2C_Mem_Read(&hi2c1, MAX30100_ADDR_R, FIFO_DATA_REG, sizeof(uint8_t), &current_sample[i], sizeof(uint8_t), I2C_TIMEOUT);
-    }
-    // return sample;
-}
 /* USER CODE END 4 */
 
 /**
@@ -602,6 +537,17 @@ void Error_Handler(void)
     __disable_irq();
     while (1)
     {
+        led_reset();
+        uint8_t error_message[255];
+        sprintf(error_message, "ERROR ERROR\r\n");
+        HAL_UART_Transmit(&huart2, &error_message, 255, UART_TIMEOUT);
+        // Blink RED RGB 5 times on error
+        for (int i = 0; i < 5; i++)
+        {
+            HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_RESET);
+            HAL_Delay(1000);
+            HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_SET);
+        }
     }
     /* USER CODE END Error_Handler_Debug */
 }
