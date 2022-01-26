@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:20:44 PM GMT+1
  * Last edited:
- *   January 26, 2022, 12:29:45 AM GMT+1
+ *   January 26, 2022, 8:40:55 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -25,6 +25,7 @@
 #define MAX_READ_SIZE 64 // Total bytes of FIFO data according to P.13
 #define MAX_SAMPLES 16 // Total number of samples in memory according to P.13
 #define SAMPLE_SIZE 4 // 4 bytes per sample
+#define MAX_RETRY 20 // Maximum amount of retries for I2C communication retries
 
 /* NOTE I2C definitions for MAX30100 */
 #pragma region I2C
@@ -107,7 +108,24 @@
 /* NOTE Masks for LED Current Control - Datasheet P. 17 LED_CONFIG 0x09 */
 #define RED_PA 0xF0 // B7, B6, B5, B4 - Red LED Current Control [3:0]
 #define IR_PA 0x0F // B3, B2, B1, B0 - IR LED Current Control [3:0]
-// FIXME I didn't provide configuration MASKS for the current control
+/* NOTE To use the following LED currents for RED_PA, the value needs to be left-shifted by 4 bits */
+#define PA_0 0x00 // 0000 - Typical LED current 0.0mA
+#define PA_4 0x01 // 0001 - Typical LED current 4.4mA
+#define PA_7 0x02 // 0010 - Typical LED current 7.6mA
+#define PA_11 0x03 // 0011 - Typical LED current 11.0mA
+#define PA_14 0x04 // 0100 - Typical LED current 14.2mA
+#define PA_17 0x05 // 0101 - Typical LED current 17.4mA
+#define PA_20 0x06 // 0110 - Typical LED current 20.8mA
+#define PA_24 0x07 // 0111 - Typical LED current 24.0mA
+#define PA_27 0x08 // 1000 - Typical LED current 27.1mA
+#define PA_30 0x09 // 1001 - Typical LED current 30.6mA
+#define PA_33 0x0A // 1010 - Typical LED current 33.8mA
+#define PA_37 0x0B // 1011 - Typical LED current 37.0mA
+#define PA_40 0x0C // 1100 - Typical LED current 40.2mA
+#define PA_43 0x0D // 1101 - Typical LED current 43.6mA
+#define PA_46 0x0E // 1110 - Typical LED current 46.8mA
+#define PA_50 0x0F // 1111 - Typical LED current 50.0mA
+
 
 /* NOTE Masks for Temperature Data - Datasheet P. 18 TEMP_INTEGER & TEMP_FRACTION */
 #define TINT 0xFF // 8-Bits - Temperature Integer Value

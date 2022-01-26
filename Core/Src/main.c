@@ -43,6 +43,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define MSG_BUFFER 30
+#define APPROX_1_SEC 10000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -79,7 +80,9 @@ static void MX_I2C1_Init(void);
 static void MX_TIM16_Init(void);
 /* USER CODE BEGIN PFP */
 void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb);
+void uart_transmit(char *message);
 void uart_dev_log(char *log);
+void check_init_error(INIT_STATUS init_status);
 void led_error_blink();
 void led_green_blink();
 void led_blue_blink();
@@ -98,15 +101,15 @@ void read_sample();
   */
 int main(void)
 {
-    /* USER CODE BEGIN 1 */
-    /* USER CODE END 1 */
+  /* USER CODE BEGIN 1 */
+  /* USER CODE END 1 */
 
-    /* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-    /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-    HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-    /* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
 // NOTE Example Message Initialization
 #ifdef PROTOCOL_EXAMPLE
@@ -129,21 +132,21 @@ int main(void)
         0x0};
 #endif /*PROTOCOL_EXAMPLE*/
 
-    /* USER CODE END Init */
+  /* USER CODE END Init */
 
-    /* Configure the system clock */
-    SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-    /* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-    /* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-    /* Initialize all configured peripherals */
-    MX_GPIO_Init();
-    MX_USART2_UART_Init();
-    MX_I2C1_Init();
-    MX_TIM16_Init();
-    /* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+  MX_I2C1_Init();
+  MX_TIM16_Init();
+  /* USER CODE BEGIN 2 */
     led_reset(); // Turn on off RGB
 
 #ifdef UART_TEST
@@ -159,47 +162,26 @@ int main(void)
 #endif /*UART_TEST*/
 
     init_status = MAX30100_initialize(&heartrate_sensor, &hi2c1);
-    switch (init_status) // Check & Handle init_status of initialization
+    check_init_error(init_status);
+    if (init_status > 0)
     {
-    case REVISION_FAILED:
-        uart_dev_log("Communication error: Receiving revision number failed...\r\n");
-        break;
-    case REVISION_FALSE:
-        uart_dev_log("Incompatible sensor: Sensor has wrong revision number...\r\n");
-        break;
-    case PART_ID_FAILED:
-        uart_dev_log("Communication error: Receiving sensor Part-ID failed...\r\n");
-        break;
-    case PART_ID_FALSE:
-        uart_dev_log("Incompatible sensor: Sensor has wrong Part-ID...\r\n");
-        break;
-    case RESET_FAILED:
-        uart_dev_log("Communication error: Resetting sensor failed...\r\n");
-        break;
-    case CONFIG_FAILED:
-        uart_dev_log("Communication error: Configuring sensor mode failed...\r\n");
-        break;
-    case SPO2_CONFIG_FAILED:
-        uart_dev_log("Communication error: Sensor SPO2 configuration failed...\r\n");
-        break;
-    case INITIAL_TEMP_FAILED:
-        uart_dev_log("Communication error: Receiving initial temperature reading failed...\r\n");
-        break;
-    case LED_CONFIG_FAILED:
-        uart_dev_log("Communication error: Configuring sensor LEDs failed...\r\n");
-        break;
-    case INTERRUPT_CONFIG_FAILED:
-        uart_dev_log("Communication error: Configuring sensor interrupts failed...\r\n");
-        break;
-    default:
-        uart_dev_log("MAX30100 sensor completed initialization.\r\n");
-        break;
+        uart_transmit("Retrying...");
+        uint8_t retry_counter = 0;
+        char retry_message[24]; // Length of "Retry-Attempt xx...\r\n" +1 (or +3 ???)
+        do
+        {
+            sprintf(retry_message, "Retry-Attempt %d...\r\n", retry_counter);
+            uart_transmit(retry_message);
+            init_status = MAX30100_initialize(&heartrate_sensor, &hi2c1);
+            retry_counter += (init_status != HAL_OK);
+            check_init_error(init_status);
+        } while (init_status > 1 && retry_counter <= MAX_RETRY);
     }
     HAL_I2C_Mem_Read_IT(&hi2c1, MAX30100_I2C_READ, INT_STATUS, sizeof(uint8_t), &current_status, sizeof(uint8_t));
-    /* USER CODE END 2 */
+  /* USER CODE END 2 */
 
-    /* Infinite loop */
-    /* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
     while (1)
     {
         if (data_received)
@@ -212,9 +194,9 @@ int main(void)
             }
             data_received = false;
         }
-        /* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-        /* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
 
 // NOTE Example message deserialization & serialization
 #ifdef PROTOCOL_EXAMPLE
@@ -239,7 +221,7 @@ int main(void)
         free(msg);
 #endif /*PROTOCOL_EXAMPLE*/
     }
-    /* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
@@ -248,53 +230,54 @@ int main(void)
   */
 void SystemClock_Config(void)
 {
-    RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-    RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
 
-    /** Configure the main internal regulator output voltage
+  /** Configure the main internal regulator output voltage
   */
-    if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /** Configure LSE Drive Capability
+  if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure LSE Drive Capability
   */
-    HAL_PWR_EnableBkUpAccess();
-    __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
-    /** Initializes the RCC Oscillators according to the specified parameters
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
+  /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-    RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSE | RCC_OSCILLATORTYPE_MSI;
-    RCC_OscInitStruct.LSEState = RCC_LSE_ON;
-    RCC_OscInitStruct.MSIState = RCC_MSI_ON;
-    RCC_OscInitStruct.MSICalibrationValue = 0;
-    RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
-    RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-    RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
-    RCC_OscInitStruct.PLL.PLLM = 1;
-    RCC_OscInitStruct.PLL.PLLN = 16;
-    RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
-    RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
-    RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
-    if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /** Initializes the CPU, AHB and APB buses clocks
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSE|RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = 0;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
+  RCC_OscInitStruct.PLL.PLLM = 1;
+  RCC_OscInitStruct.PLL.PLLN = 16;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
+  RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
+  RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Initializes the CPU, AHB and APB buses clocks
   */
-    RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK | RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-    RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-    RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-    RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
-    RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-    if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /** Enable MSI Auto calibration
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Enable MSI Auto calibration
   */
-    HAL_RCCEx_EnableMSIPLLMode();
+  HAL_RCCEx_EnableMSIPLLMode();
 }
 
 /**
@@ -305,41 +288,42 @@ void SystemClock_Config(void)
 static void MX_I2C1_Init(void)
 {
 
-    /* USER CODE BEGIN I2C1_Init 0 */
+  /* USER CODE BEGIN I2C1_Init 0 */
 
-    /* USER CODE END I2C1_Init 0 */
+  /* USER CODE END I2C1_Init 0 */
 
-    /* USER CODE BEGIN I2C1_Init 1 */
+  /* USER CODE BEGIN I2C1_Init 1 */
 
-    /* USER CODE END I2C1_Init 1 */
-    hi2c1.Instance = I2C1;
-    hi2c1.Init.Timing = 0x00707CBB;
-    hi2c1.Init.OwnAddress1 = 0;
-    hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-    hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-    hi2c1.Init.OwnAddress2 = 0;
-    hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
-    hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-    hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-    if (HAL_I2C_Init(&hi2c1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /** Configure Analogue filter
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x00707CBB;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Analogue filter
   */
-    if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /** Configure Digital filter
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Digital filter
   */
-    if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN I2C1_Init 2 */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
 
-    /* USER CODE END I2C1_Init 2 */
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -350,27 +334,28 @@ static void MX_I2C1_Init(void)
 static void MX_TIM16_Init(void)
 {
 
-    /* USER CODE BEGIN TIM16_Init 0 */
+  /* USER CODE BEGIN TIM16_Init 0 */
 
-    /* USER CODE END TIM16_Init 0 */
+  /* USER CODE END TIM16_Init 0 */
 
-    /* USER CODE BEGIN TIM16_Init 1 */
+  /* USER CODE BEGIN TIM16_Init 1 */
 
-    /* USER CODE END TIM16_Init 1 */
-    htim16.Instance = TIM16;
-    htim16.Init.Prescaler = 32000 - 1;
-    htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim16.Init.Period = 65536 - 1;
-    htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-    htim16.Init.RepetitionCounter = 0;
-    htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-    if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN TIM16_Init 2 */
+  /* USER CODE END TIM16_Init 1 */
+  htim16.Instance = TIM16;
+  htim16.Init.Prescaler = 32000-1;
+  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim16.Init.Period = 65536-1;
+  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim16.Init.RepetitionCounter = 0;
+  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM16_Init 2 */
 
-    /* USER CODE END TIM16_Init 2 */
+  /* USER CODE END TIM16_Init 2 */
+
 }
 
 /**
@@ -381,30 +366,31 @@ static void MX_TIM16_Init(void)
 static void MX_USART2_UART_Init(void)
 {
 
-    /* USER CODE BEGIN USART2_Init 0 */
+  /* USER CODE BEGIN USART2_Init 0 */
 
-    /* USER CODE END USART2_Init 0 */
+  /* USER CODE END USART2_Init 0 */
 
-    /* USER CODE BEGIN USART2_Init 1 */
+  /* USER CODE BEGIN USART2_Init 1 */
 
-    /* USER CODE END USART2_Init 1 */
-    huart2.Instance = USART2;
-    huart2.Init.BaudRate = 115200;
-    huart2.Init.WordLength = UART_WORDLENGTH_8B;
-    huart2.Init.StopBits = UART_STOPBITS_1;
-    huart2.Init.Parity = UART_PARITY_NONE;
-    huart2.Init.Mode = UART_MODE_TX_RX;
-    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-    huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-    huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-    if (HAL_UART_Init(&huart2) != HAL_OK)
-    {
-        Error_Handler();
-    }
-    /* USER CODE BEGIN USART2_Init 2 */
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 115200;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart2.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart2.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
 
-    /* USER CODE END USART2_Init 2 */
+  /* USER CODE END USART2_Init 2 */
+
 }
 
 /**
@@ -414,42 +400,43 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-    /* GPIO Ports Clock Enable */
-    __HAL_RCC_GPIOC_CLK_ENABLE();
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
-    /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin|RGB_RED_Pin|RGB_GREEN_Pin, GPIO_PIN_RESET);
 
-    /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin, GPIO_PIN_RESET);
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin, GPIO_PIN_RESET);
 
-    /*Configure GPIO pin : EXTI3_BUTTON_Pin */
-    GPIO_InitStruct.Pin = EXTI3_BUTTON_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(EXTI3_BUTTON_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : EXTI3_BUTTON_Pin */
+  GPIO_InitStruct.Pin = EXTI3_BUTTON_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(EXTI3_BUTTON_GPIO_Port, &GPIO_InitStruct);
 
-    /*Configure GPIO pins : RGB_BLUE_Pin RGB_RED_Pin RGB_GREEN_Pin */
-    GPIO_InitStruct.Pin = RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  /*Configure GPIO pins : RGB_BLUE_Pin RGB_RED_Pin RGB_GREEN_Pin */
+  GPIO_InitStruct.Pin = RGB_BLUE_Pin|RGB_RED_Pin|RGB_GREEN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    /*Configure GPIO pin : BOARD_LED_Pin */
-    GPIO_InitStruct.Pin = BOARD_LED_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(BOARD_LED_GPIO_Port, &GPIO_InitStruct);
+  /*Configure GPIO pin : BOARD_LED_Pin */
+  GPIO_InitStruct.Pin = BOARD_LED_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(BOARD_LED_GPIO_Port, &GPIO_InitStruct);
 
-    /* EXTI interrupt init*/
-    HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
@@ -464,15 +451,19 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
     if (hi2c == &hi2c1)
     {
+        char interrupt_status[8];
+        uart_transmit("Received Interrupt Status: ");
+        sprintf(interrupt_status, "%x\r\n", current_status);
+        uart_transmit(interrupt_status);
         if ((current_status & FIFO_FULL))
         {
-            HAL_StatusTypeDef status;
-            status = MAX30100_read_samples(&heartrate_sensor);
-            if (status != HAL_OK)
-            {
-                Error_Handler();
-            }
-            data_received = true;
+            // FIXME Ignoring status for now
+            HAL_StatusTypeDef status = MAX30100_read_samples(&heartrate_sensor);
+            // if (status != HAL_OK)
+            // {
+            //     Error_Handler();
+            // }
+            data_received = (status == HAL_OK);
         }
         HAL_I2C_Mem_Read_IT(&hi2c1, MAX30100_I2C_READ, INT_STATUS, sizeof(uint8_t), &current_status, sizeof(uint8_t));
     }
@@ -521,6 +512,21 @@ void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb)
     HAL_TIM_Base_Start_IT(&htim16);
 }
 
+void uart_transmit(char *message)
+{
+    if (message == NULL)
+    {
+        return;
+    }
+    HAL_StatusTypeDef ret;
+    uint16_t len = (sizeof(char) * strlen(message)) + 1;
+    ret = HAL_UART_Transmit(&huart2, (uint8_t *)message, len, UART_TIMEOUT);
+    if (ret != HAL_OK)
+    {
+        led_blue_blink();
+    }
+}
+
 void uart_dev_log(char *log)
 {
     if (log == NULL)
@@ -533,18 +539,65 @@ void uart_dev_log(char *log)
     ret = HAL_UART_Transmit_IT(&huart2, (uint8_t *)log, len);
     if (ret != HAL_OK)
     {
-        Error_Handler();
+        led_blue_blink();
     }
 }
+void check_init_error(INIT_STATUS init_status)
+{
+    switch (init_status) // Check & Handle init_status of initialization
+    {
+    case REVISION_FAILED:
+        uart_transmit("Communication error: Receiving revision number failed...\r\n");
+        break;
+    case REVISION_FALSE:
+        uart_transmit("Incompatible sensor: Sensor has wrong revision number...\r\n");
+        break;
+    case PART_ID_FAILED:
+        uart_transmit("Communication error: Receiving sensor Part-ID failed...\r\n");
+        break;
+    case PART_ID_FALSE:
+        uart_transmit("Incompatible sensor: Sensor has wrong Part-ID...\r\n");
+        break;
+    case RESET_FAILED:
+        uart_transmit("Communication error: Resetting sensor failed...\r\n");
+        break;
+    case CONFIG_FAILED:
+        uart_transmit("Communication error: Configuring sensor mode failed...\r\n");
+        break;
+    case SPO2_CONFIG_FAILED:
+        uart_transmit("Communication error: Sensor SPO2 configuration failed...\r\n");
+        break;
+    case INITIAL_TEMP_FAILED:
+        uart_transmit("Communication error: Receiving initial temperature reading failed...\r\n");
+        break;
+    case LED_CONFIG_FAILED:
+        uart_transmit("Communication error: Configuring sensor LEDs failed...\r\n");
+        break;
+    case INTERRUPT_CONFIG_FAILED:
+        uart_transmit("Communication error: Configuring sensor interrupts failed...\r\n");
+        break;
+    default:
+        uart_transmit("MAX30100 sensor completed initialization.\r\n");
+        break;
+    }
+}
+
+void led_blue_blink()
+{
+    HAL_GPIO_WritePin(RGB_BLUE_GPIO_Port, RGB_BLUE_Pin, GPIO_PIN_RESET);
+    _tim_timeout_nonblocking_with_callback(1000, led_reset);
+}
+
 void led_green_blink()
 {
     HAL_GPIO_WritePin(RGB_GREEN_GPIO_Port, RGB_GREEN_Pin, GPIO_PIN_RESET);
     _tim_timeout_nonblocking_with_callback(1000, led_reset);
 }
 
+// Error blinking is yellow - something went wrong, but rest is ok
 void led_error_blink()
 {
-    HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_RESET); // RED + GREEN = YELLOW
     _tim_timeout_nonblocking_with_callback(1000, led_reset);
 }
 
@@ -560,27 +613,26 @@ void led_reset()
   */
 void Error_Handler(void)
 {
-    /* USER CODE BEGIN Error_Handler_Debug */
+  /* USER CODE BEGIN Error_Handler_Debug */
     /* User can add his own implementation to report the HAL error return state */
     __disable_irq();
     while (1)
     {
         led_reset();
-        uint8_t error_message[255];
-        sprintf((char *)error_message, "ERROR ERROR\r\n");
-        HAL_UART_Transmit(&huart2, error_message, 255, UART_TIMEOUT);
-        // Blink RED RGB 5 times on error
+        // Blink RED RGB 5 times on terrible error
         for (int i = 0; i < 5; i++)
         {
-            HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_RESET);
-            HAL_Delay(1000);
-            HAL_GPIO_WritePin(RGB_RED_GPIO_Port, RGB_RED_Pin, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(GPIOA, RGB_RED_Pin, GPIO_PIN_RESET);
+            for (int i = 0; i < APPROX_1_SEC; i++)
+                ; // Approximately delaying for 1 second
+            led_reset();
         }
+        break;
     }
-    /* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef USE_FULL_ASSERT
+#ifdef  USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.
@@ -590,10 +642,10 @@ void Error_Handler(void)
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-    /* USER CODE BEGIN 6 */
+  /* USER CODE BEGIN 6 */
     /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-    /* USER CODE END 6 */
+  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
 

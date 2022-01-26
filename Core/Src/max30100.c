@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:21:13 PM GMT+1
  * Last edited:
- *   January 26, 2022, 12:35:02 AM GMT+1
+ *   January 26, 2022, 8:44:48 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -40,6 +40,8 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
     uint8_t data;
     HAL_StatusTypeDef status;
 
+    /* NOTE Wait for Device to be ready */
+
     /* NOTE Initial communication - basic checks
      * Check device revision & part id - Serves as a basic check if the device responds
      */
@@ -74,10 +76,10 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
     /* NOTE SPO2 configuration MAX30100 */
     data = 0x00;
 #ifdef HR_ONLY_MODE
-    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_1600);
+    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_400);
 #endif
 #ifdef SPO2_MODE
-    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_1600);
+    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_400);
 #endif
     status = MAX30100_write_register(sensor, SPO2_CONFIG, &data);
     if (status != HAL_OK)
@@ -91,7 +93,8 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
 #endif
 
     /* NOTE LED configuration MAX30100 */
-    data = 0x00 | 0xEF; // RED_PA = 1110 (46.8mA) / IR_PA = 1111 (50mA) => 0xEF
+    data = 0x00;
+    data |= (RED_PA & (PA_40 << 4)) | (IR_PA & (PA_40)); // IR_PA & RED_PA = 40.2mA => 0xCC
     status = MAX30100_write_register(sensor, LED_CONFIG, &data);
     if (status != HAL_OK)
         return LED_CONFIG_FAILED;
@@ -133,7 +136,7 @@ HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor)
         // Ignore all bits other than TEMP_READY
         temp_ready &= TEMP_READY;
         // Loop until temperature is ready or communication failed 20 times in total
-    } while (!temp_ready && interrupt_error_counter <= 20);
+    } while (!temp_ready && interrupt_error_counter <= MAX_RETRY);
     status[1] = MAX30100_read_register(sensor, TEMP_INTEGER, (uint8_t *)&temperature);
     status[2] = MAX30100_read_register(sensor, TEMP_FRACTION, &fraction);
     fraction &= 0x07; // Ignoring all other fraction bits, if wrongly set.
