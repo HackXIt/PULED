@@ -31,6 +31,7 @@
 // NOTE Standard Library Imports
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -41,7 +42,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define MSG_BUFFER 30
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -62,6 +63,7 @@ UART_HandleTypeDef huart2;
 MAX30100 heartrate_sensor;
 uint8_t init_status = 0x00;
 uint8_t current_status = 0x00;
+bool data_received = false;
 #ifndef CALLBACK
 #define CALLBACK
 typedef void (*CB)(void);
@@ -200,7 +202,16 @@ int main(void)
     /* USER CODE BEGIN WHILE */
     while (1)
     {
-        // TODO Implement something in MAIN
+        if (data_received)
+        {
+            char heartrate_message[MSG_BUFFER];
+            for (int i = 0; i < MAX_SAMPLES; i++)
+            {
+                sprintf(heartrate_message, "HR: %d - Ox: %d\r\n", heartrate_sensor.IR_data[i], heartrate_sensor.RED_data[i]);
+                uart_dev_log(heartrate_message);
+            }
+            data_received = false;
+        }
         /* USER CODE END WHILE */
 
         /* USER CODE BEGIN 3 */
@@ -461,6 +472,7 @@ void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
             {
                 Error_Handler();
             }
+            data_received = true;
         }
         HAL_I2C_Mem_Read_IT(&hi2c1, MAX30100_I2C_READ, INT_STATUS, sizeof(uint8_t), &current_status, sizeof(uint8_t));
     }
