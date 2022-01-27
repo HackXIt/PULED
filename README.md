@@ -12,12 +12,12 @@
 - [x] Protocol Implementation
    - [x] Message Generation
    - [x] Message Serialize
-- [ ] Basic module functionality tested
-   - [ ] Input Module
+- [x] Basic module functionality tested
+   - [x] Input Module
    - [ ] Output Module
 - Project Tasks - Input Module
-   - [ ] Task *"Gut"* => IN-02
-   - [ ] Task *"Sehr gut"*  => IN-01
+   - [x] Task *"Gut"* => IN-02
+   - [x] Task *"Sehr gut"*  => IN-01
 - Project Tasks - Output Module
    - [ ] Task *"Befriedigend"* => OUT-03
    - [ ] Task *"Gut"* => OUT-02
