@@ -62,11 +62,14 @@ void Error_Handler(void);
 #define MCO_GPIO_Port GPIOA
 #define VCP_TX_Pin GPIO_PIN_2
 #define VCP_TX_GPIO_Port GPIOA
-#define EXTI3_BUTTON_Pin GPIO_PIN_3
-#define EXTI3_BUTTON_GPIO_Port GPIOA
-#define EXTI3_BUTTON_EXTI_IRQn EXTI3_IRQn
+#define BUTTON_INT_Pin GPIO_PIN_3
+#define BUTTON_INT_GPIO_Port GPIOA
+#define BUTTON_INT_EXTI_IRQn EXTI3_IRQn
 #define RGB_BLUE_Pin GPIO_PIN_4
 #define RGB_BLUE_GPIO_Port GPIOA
+#define HR_INT_Pin GPIO_PIN_5
+#define HR_INT_GPIO_Port GPIOA
+#define HR_INT_EXTI_IRQn EXTI9_5_IRQn
 #define RGB_RED_Pin GPIO_PIN_6
 #define RGB_RED_GPIO_Port GPIOA
 #define RGB_GREEN_Pin GPIO_PIN_8

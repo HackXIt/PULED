@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:20:44 PM GMT+1
  * Last edited:
- *   January 26, 2022, 8:40:55 PM GMT+1
+ *   January 27, 2022, 4:53:48 AM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -19,7 +19,18 @@
 
 #include "stm32l4xx_hal.h" /* Required for HAL_Library Functions */
 
+/* -------- FLAGS -------- */
+/* NOTE Activate "Heartrate only mode" or "SpO2 Mode"
+ * Does not affect the sample rate or pulse width!
+ */
+/* FIXME Currently only heartrate only mode is working, dunno why, temperature just won't work */
+#define HR_ONLY_MODE
+// #define SPO2_MODE
+// #define TEMP_ONLY_MODE
+
 /* -------- DEFINITIONS -------- */
+
+/* NOTE PLEASE IGNORE the compiler warning about "#pragma region" - It doesn't have any negative effect */
 
 /* NOTE Generic definitions for MAX30100 */
 #define MAX_READ_SIZE 64 // Total bytes of FIFO data according to P.13
@@ -130,19 +141,21 @@
 /* NOTE Masks for Temperature Data - Datasheet P. 18 TEMP_INTEGER & TEMP_FRACTION */
 #define TINT 0xFF // 8-Bits - Temperature Integer Value
 #define TFRAC 0x0F // 4-Bits - Temperature Fraction Value
-
 #pragma endregion END_OF_MASKS
 
 /* -------- STRUCTURES -------- */
 
 /* NOTE Sensor Datastructure holding information */
 typedef struct {
-    I2C_HandleTypeDef *i2c_handle;
+    I2C_HandleTypeDef *i2c_handle; // Handle for I2C communication
     uint16_t IR_data[MAX_SAMPLES]; // All infrared ADC samples
     uint16_t RED_data[MAX_SAMPLES]; // All red led ADC samples
+    uint16_t hr_sample; // Current heartrate sample
+    uint16_t spo2_sample; // Current SPO2 sample
     float temperature; // Converted temperature reading according to formula
 } MAX30100;
 
+/* NOTE Error codes which may happen during initialization */
 typedef enum {
     INIT_OK = 0x00,
     REVISION_FAILED,
@@ -159,17 +172,74 @@ typedef enum {
 
 /* -------- INITIALIZATION -------- */
 
+/************************************************
+ * @brief Initializes the MAX30100 sensor and prepares sensor datastructure
+ * @note The initialization is dependant on MACROS
+ * @param sensor - Sensor datastructure
+ * @param i2c_handle - I2C Communication handle to use & store in datastructure
+ * @return INIT_STATUS - Returns initialization status code
+ ***********************************************/
 INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle);
 
 /* -------- DATA ACQUISITION -------- */
 
+/************************************************
+ * @brief Reads & properly converts the temperature of MAX30100
+ * 
+ * @param sensor - Sensor datastructure
+ * @return HAL_StatusTypeDef - Returns communication status
+ ***********************************************/
 HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor);
+/************************************************
+ * @brief Reads all currently available samples of MAX30100
+ * Currently available is calculated with the Read & Write Pointer of the FIFO
+ * @param sensor - Sensor datastructure
+ * @return HAL_StatusTypeDef  - Returns communication status
+ ***********************************************/
 HAL_StatusTypeDef MAX30100_read_samples(MAX30100 *sensor);
+/************************************************
+ * @brief Reads one sample of MAX30100
+ * 
+ * @param sensor - Sensor datastructure
+ * @return HAL_StatusTypeDef - Returns communication status
+ ***********************************************/
+HAL_StatusTypeDef MAX30100_read_sample(MAX30100 *sensor);
+/************************************************
+ * @brief Reads the status of the interrupt register of MAX30100
+ * 
+ * @param sensor - Sensor datastructure
+ * @return uint8_t - Returns data of the interrupt register
+ ***********************************************/
+uint8_t MAX30100_read_interrupts(MAX30100 *sensor);
 
 /* -------- ABSTRACTION FUNCTIONS -------- */
 
+/************************************************
+ * @brief Communication function, which reads 1 byte of data from given register of MAX30100
+ * 
+ * @param sensor - Sensor datastructure
+ * @param reg - Register of MAX30100 to be read
+ * @param data - Pointer to target
+ * @return HAL_StatusTypeDef - Returns communication status
+ ***********************************************/
 HAL_StatusTypeDef MAX30100_read_register(MAX30100 *sensor, uint8_t reg, uint8_t *data);
+/************************************************
+ * @brief Communication function, which reads X byte of data from given register of MAX30100
+ * @note The only register where this is applicable is the FIFO, all others are only 1 byte
+ * @param sensor - Sensor datastructure
+ * @param reg - Register of MAX30100 to be read
+ * @param data - Pointer to target (should have appropriate size)
+ * @param size - Amount of bytes to be read
+ * @return HAL_StatusTypeDef - Returns communication status
+ ***********************************************/
 HAL_StatusTypeDef MAX30100_read_registers(MAX30100 *sensor, uint8_t reg, uint8_t *data, uint8_t size);
+/************************************************
+ * @brief Communication function, which writes 1 byte of data into given register of MAX30100
+ * 
+ * @param sensor - Sensor datastructure
+ * @param reg - Register of MAX30100 to be written to
+ * @param data - Pointer of source
+ * @return HAL_StatusTypeDef - Returns communication status
+ ***********************************************/
 HAL_StatusTypeDef MAX30100_write_register(MAX30100 *sensor, uint8_t reg, uint8_t *data);
-
 #endif
