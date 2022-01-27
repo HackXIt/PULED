@@ -65,7 +65,7 @@
  */
 #define TRIGGER_ON_FIFO
 // #define TRIGGER_ON_SAMPLE
-/* FIXME Since temperature reading is not working, this trigger is also ineffective */
+/* FIXME Since temperature reading is not working, the following trigger is ineffective / not working */
 // #define TRIGGER_ON_TEMP
 
 /* NOTE Activate/Deactivate debugging message */
@@ -269,25 +269,23 @@ int main(void)
             uint16_t avg = sum / MAX_SAMPLES; // Calculate average of samples
             if (avg > MINIMUM_VIABLE_MEASUREMENT)
             {
-                if (!measure_msg)
+                if (!measure_msg) // Check if "Measuring..." was already written
                 {
-                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    // If not, write it now (IRQ disabled because OLED is sensible)
                     __NVIC_DisableIRQ(EXTI9_5_IRQn);
                     finger_request = false;
                     oledc_fill_screen(0);
                     oledc_set_font(&guiFont_Tahoma_10_Regular[0], 0x07E0); // Color is pure green
                     oledc_text_p("Measuring...");
                     measure_msg = true;
-                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
                     __NVIC_EnableIRQ(EXTI9_5_IRQn);
                 }
-                // uint32_t sum_samples = 0x00000000;
-                // uint8_t sample_counter = 0x00;
                 sum_samples += sum;
                 sample_counter += MAX_SAMPLES;
-                if ((sample_counter / MAX_SAMPLES) >= MAX_SAMPLES - 1)
+                /* NOTE We could have gone the alternate way of updating the AVG continously, but meh */
+                if ((sample_counter / MAX_SAMPLES) >= MAX_SAMPLES - 1) // Check if we reached maximum number of samples for good AVG
                 {
-                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn); // Disable IRQ for duration of setting OLED to new value
+                    // If yes, write result now (IRQ disabled because OLED is sensible)
                     __NVIC_DisableIRQ(EXTI9_5_IRQn);
                     measure_msg = false;
                     finger_request = false;
@@ -299,24 +297,21 @@ int main(void)
                     oledc_text_two_lines("HR AVG:", avg_value_text);
                     sum_samples = 0;
                     sample_counter = 0;
-                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // Re-enable IRQ
-                    HAL_Delay(5000);
+                    HAL_Delay(3000);
                     __NVIC_EnableIRQ(EXTI9_5_IRQn);
                 }
             }
             else
             {
-                if (!finger_request)
-                { // Check if "Place finger" request was already written
-                    // If not, write it now
-                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+                if (!finger_request) // Check if "Place finger" request was already written
+                {
+                    // If not, write it now (IRQ disabled because OLED is sensible)
                     measure_msg = false;
                     __NVIC_DisableIRQ(EXTI9_5_IRQn);
                     oledc_fill_screen(0);                                  // Fill screen black
                     oledc_set_font(&guiFont_Tahoma_10_Regular[0], 0xF800); // Color is pure red
                     oledc_text_two_lines("Place", "finger on sensor..");
                     finger_request = true;
-                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
                     __NVIC_EnableIRQ(EXTI9_5_IRQn);
                 }
             }
