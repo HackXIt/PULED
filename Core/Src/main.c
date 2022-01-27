@@ -27,6 +27,9 @@
 #include "protocol.h"
 // NOTE Heartrate Module Imports
 #include "max30100.h"
+// NOTE Display Module Imports
+#include "oledc.h"
+#include "font.h"
 
 // NOTE Standard Library Imports
 #include <string.h>
@@ -43,8 +46,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define MSG_BUFFER 255
-#define APPROX_1_SEC 10000
 #define DEBOUNCE 50
+#define MINIMUM_VIABLE_MEASUREMENT 10000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -62,15 +65,23 @@
  */
 #define TRIGGER_ON_FIFO
 // #define TRIGGER_ON_SAMPLE
-/* FIXME Since temperature reading is not working, this trigger is also ineffective*/
+/* FIXME Since temperature reading is not working, this trigger is also ineffective */
 // #define TRIGGER_ON_TEMP
 
 /* NOTE Activate/Deactivate debugging message */
 // #define DEBUG
+
+/* NOTE Activate/Deactivate printing interrupt status to UART */
+// #define PRINT_INTERRUPT_STATUS
+
+/* NOTE Activate/Deactivate Button interrupt (Only with heartrate module alone) */
+// #define BUTTON_INT
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
+SPI_HandleTypeDef hspi3;
 
 TIM_HandleTypeDef htim16;
 
@@ -80,7 +91,12 @@ UART_HandleTypeDef huart2;
 MAX30100 heartrate_sensor;
 uint8_t init_status = 0x00;
 uint8_t current_status = 0x00;
+uint32_t sum_samples = 0x00000000;
+uint32_t total_avg = 0x00000000;
+uint8_t sample_counter = 0x00;
 bool data_received = false;
+bool finger_request = false;
+bool measure_msg = false;
 #ifndef CALLBACK
 #define CALLBACK
 typedef void (*CB)(void);
@@ -94,14 +110,13 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM16_Init(void);
+static void MX_SPI3_Init(void);
 /* USER CODE BEGIN PFP */
 void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb);
 void uart_transmit(char *message);
 void uart_dev_log(char *log);
 void check_init_error(INIT_STATUS init_status);
 void led_error_blink();
-void led_green_blink();
-void led_blue_blink();
 void led_reset();
 void read_sample();
 /* USER CODE END PFP */
@@ -162,6 +177,7 @@ int main(void)
     MX_USART2_UART_Init();
     MX_I2C1_Init();
     MX_TIM16_Init();
+    MX_SPI3_Init();
     /* USER CODE BEGIN 2 */
     led_reset(); // Turn on off RGB
 
@@ -172,13 +188,13 @@ int main(void)
     // Also prints Hello World 5 times & blinks led with each print.
     for (uint8_t i = 0; i < 5; i++)
     {
-        HAL_GPIO_TogglePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin);
+        HAL_GPIO_TogglePin(RGB_GREEN_GPIO_Port, RGB_GREEN_Pin); /* NOTE Refactored because Board-LED is used */
         HAL_UART_Transmit(&huart2, (uint8_t *)test_msg, sizeof(char) * strlen((char *)test_msg), 50);
         HAL_Delay(1000);
     }
 #endif /*UART_TEST*/
 
-// NOTE Print example message via protocol implementation
+// NOTE Print example message via protocol implementation (Protocol which we didn't end up using)
 #ifdef PROTOCOL_EXAMPLE
     my_message = deserialize_message(testArray);
     current_item = my_message->content->head;
@@ -201,6 +217,11 @@ int main(void)
     free(msg);
 #endif /*PROTOCOL_EXAMPLE*/
 
+    oledc_init();
+    oledc_fill_screen(0);                                  // 0 for black screen
+    oledc_set_font(&guiFont_Tahoma_14_Regular[0], 0xFFFF); // White text color
+    oledc_text_p("Initializing...");
+
     init_status = MAX30100_initialize(&heartrate_sensor, &hi2c1);
     check_init_error(init_status);
     if (init_status > 0) // Retry initialization if failed (using MAX_RETRY for amount of retries)
@@ -217,6 +238,7 @@ int main(void)
             check_init_error(init_status);
         } while (init_status >= 1 && retry_counter <= MAX_RETRY);
     }
+    oledc_text_at_line("...done", 2);
 #ifdef TEMP_ONLY_MODE
     uint8_t data = MODE_TEMP_EN;
 #endif
@@ -228,14 +250,75 @@ int main(void)
     {
         if (data_received)
         {
-            char heartrate_message[MSG_BUFFER]; // 22 chars + 2 * 16 bit number + ???
+            uint32_t sum = 0;
             for (int i = 0; i < MAX_SAMPLES; i++)
             {
-                sprintf(heartrate_message, "HR: %d - O2: %d - Temp: %f\r\n",
-                        heartrate_sensor.IR_data[i],
-                        heartrate_sensor.RED_data[i],
-                        heartrate_sensor.temperature);
-                uart_transmit(heartrate_message);
+#ifdef DEBUG // Print full sample output on UART in debug mode (for first sample)
+                if (i == 0)
+                {
+                    char heartrate_message[MSG_BUFFER]; // 22 chars + 2 * 16 bit number + ???
+                    sprintf(heartrate_message, "HR: %d - O2: %d - Temp: %f\r\n",
+                            heartrate_sensor.IR_data[i],
+                            heartrate_sensor.RED_data[i],
+                            heartrate_sensor.temperature);
+                    uart_transmit(heartrate_message);
+                }
+#endif
+                sum += heartrate_sensor.IR_data[i]; // Calculate sum of sample-memory-bank
+            }
+            uint16_t avg = sum / MAX_SAMPLES; // Calculate average of samples
+            if (avg > MINIMUM_VIABLE_MEASUREMENT)
+            {
+                if (!measure_msg)
+                {
+                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    __NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    finger_request = false;
+                    oledc_fill_screen(0);
+                    oledc_set_font(&guiFont_Tahoma_10_Regular[0], 0x07E0); // Color is pure green
+                    oledc_text_p("Measuring...");
+                    measure_msg = true;
+                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+                    __NVIC_EnableIRQ(EXTI9_5_IRQn);
+                }
+                // uint32_t sum_samples = 0x00000000;
+                // uint8_t sample_counter = 0x00;
+                sum_samples += sum;
+                sample_counter += MAX_SAMPLES;
+                if ((sample_counter / MAX_SAMPLES) >= MAX_SAMPLES - 1)
+                {
+                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn); // Disable IRQ for duration of setting OLED to new value
+                    __NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    measure_msg = false;
+                    finger_request = false;
+                    oledc_fill_screen(0);
+                    oledc_set_font(&guiFont_Tahoma_14_Regular[0], 0xFFFF);
+                    total_avg = sum_samples / sample_counter;
+                    char avg_value_text[sizeof(total_avg)];
+                    sprintf(avg_value_text, "%lu", total_avg);
+                    oledc_text_two_lines("HR AVG:", avg_value_text);
+                    sum_samples = 0;
+                    sample_counter = 0;
+                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn); // Re-enable IRQ
+                    HAL_Delay(5000);
+                    __NVIC_EnableIRQ(EXTI9_5_IRQn);
+                }
+            }
+            else
+            {
+                if (!finger_request)
+                { // Check if "Place finger" request was already written
+                    // If not, write it now
+                    // HAL_NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    measure_msg = false;
+                    __NVIC_DisableIRQ(EXTI9_5_IRQn);
+                    oledc_fill_screen(0);                                  // Fill screen black
+                    oledc_set_font(&guiFont_Tahoma_10_Regular[0], 0xF800); // Color is pure red
+                    oledc_text_two_lines("Place", "finger on sensor..");
+                    finger_request = true;
+                    // HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+                    __NVIC_EnableIRQ(EXTI9_5_IRQn);
+                }
             }
             data_received = false;
         }
@@ -351,6 +434,45 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief SPI3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI3_Init(void)
+{
+
+    /* USER CODE BEGIN SPI3_Init 0 */
+
+    /* USER CODE END SPI3_Init 0 */
+
+    /* USER CODE BEGIN SPI3_Init 1 */
+
+    /* USER CODE END SPI3_Init 1 */
+    /* SPI3 parameter configuration*/
+    hspi3.Instance = SPI3;
+    hspi3.Init.Mode = SPI_MODE_MASTER;
+    hspi3.Init.Direction = SPI_DIRECTION_2LINES;
+    hspi3.Init.DataSize = SPI_DATASIZE_8BIT;
+    hspi3.Init.CLKPolarity = SPI_POLARITY_LOW;
+    hspi3.Init.CLKPhase = SPI_PHASE_1EDGE;
+    hspi3.Init.NSS = SPI_NSS_SOFT;
+    hspi3.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+    hspi3.Init.FirstBit = SPI_FIRSTBIT_MSB;
+    hspi3.Init.TIMode = SPI_TIMODE_DISABLE;
+    hspi3.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+    hspi3.Init.CRCPolynomial = 7;
+    hspi3.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+    hspi3.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+    if (HAL_SPI_Init(&hspi3) != HAL_OK)
+    {
+        Error_Handler();
+    }
+    /* USER CODE BEGIN SPI3_Init 2 */
+
+    /* USER CODE END SPI3_Init 2 */
+}
+
+/**
   * @brief TIM16 Initialization Function
   * @param None
   * @retval None
@@ -366,9 +488,9 @@ static void MX_TIM16_Init(void)
 
     /* USER CODE END TIM16_Init 1 */
     htim16.Instance = TIM16;
-    htim16.Init.Prescaler = 32000 - 1;
+    htim16.Init.Prescaler = 2 - 1;
     htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-    htim16.Init.Period = 65536 - 1;
+    htim16.Init.Period = 40000 - 1;
     htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
     htim16.Init.RepetitionCounter = 0;
     htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
@@ -430,19 +552,14 @@ static void MX_GPIO_Init(void)
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
     /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, OLED_C_RST_Pin | OLED_C_EN_Pin | RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_RESET);
 
     /*Configure GPIO pin Output Level */
-    HAL_GPIO_WritePin(BOARD_LED_GPIO_Port, BOARD_LED_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOB, OLED_C_CS_Pin | OLED_C_DC_Pin, GPIO_PIN_RESET);
 
-    /*Configure GPIO pin : BUTTON_INT_Pin */
-    GPIO_InitStruct.Pin = BUTTON_INT_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(BUTTON_INT_GPIO_Port, &GPIO_InitStruct);
-
-    /*Configure GPIO pins : RGB_BLUE_Pin RGB_RED_Pin RGB_GREEN_Pin */
-    GPIO_InitStruct.Pin = RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin;
+    /*Configure GPIO pins : OLED_C_RST_Pin OLED_C_EN_Pin RGB_BLUE_Pin RGB_RED_Pin
+                           RGB_GREEN_Pin */
+    GPIO_InitStruct.Pin = OLED_C_RST_Pin | OLED_C_EN_Pin | RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -454,33 +571,87 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(HR_INT_GPIO_Port, &GPIO_InitStruct);
 
-    /*Configure GPIO pin : BOARD_LED_Pin */
-    GPIO_InitStruct.Pin = BOARD_LED_Pin;
+    /*Configure GPIO pins : OLED_C_CS_Pin OLED_C_DC_Pin */
+    GPIO_InitStruct.Pin = OLED_C_CS_Pin | OLED_C_DC_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(BOARD_LED_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* EXTI interrupt init*/
-    HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
-    HAL_NVIC_EnableIRQ(EXTI3_IRQn);
-
     HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
     HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 }
 
 /* USER CODE BEGIN 4 */
+/* NOTE Code for Display */
+void hal_gpio_csSet(bool pinState)
+{
+    HAL_GPIO_WritePin(OLED_C_CS_GPIO_Port, OLED_C_CS_Pin, pinState);
+}
+void hal_gpio_pwmSet(bool pinState)
+{
+    HAL_GPIO_WritePin(OLED_C_DC_GPIO_Port, OLED_C_DC_Pin, pinState);
+}
+void hal_gpio_intSet(bool pinState)
+{
+    HAL_GPIO_WritePin(OLED_C_EN_GPIO_Port, OLED_C_EN_Pin, pinState);
+}
+void hal_gpio_rstSet(bool pinState)
+{
+    HAL_GPIO_WritePin(OLED_C_RST_GPIO_Port, OLED_C_RST_Pin, pinState);
+}
+
+void delay(int delay)
+{
+    HAL_Delay(delay);
+}
+
+unsigned int spi_read(unsigned int buffer)
+{
+    uint8_t data;
+
+    HAL_SPI_Receive(&hspi3, &data, 1, 50);
+
+    return data;
+}
+
+void hal_spiWrite(uint8_t *pBuf, uint16_t nBytes)
+{
+    HAL_SPI_Transmit(&hspi3, pBuf, nBytes, 50);
+}
+
+/* NOTE END of Display code */
+
+/* NOTE START of Heartrate code */
+
+#ifdef DEBUG
+/* NOTE All UART & I2C Callback functions */
 void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    __NOP();
+    __NOP(); // To be able to debug here with breakpoints
 }
 void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    __NOP();
+    __NOP(); // To be able to debug here with breakpoints
 }
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    __NOP(); // To be able to debug here with breakpoints
+}
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+    __NOP(); // To be able to debug here with breakpoints
+}
+#endif
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
+#ifdef BUTTON_INT // DO NOT USE THIS WITH 2 MODULES! BUTTON_INT_Pin is not available. (PA3 is needed for OLED_C_EN)
+    /* NOTE Due to GPIO constraints using 2 modules, this was redacted from the code
+     * It remains as a debug method, because sometimes it's nice to have a simple method of initiating just one reading
+     * 
+     */
     /* NOTE On button press, the samples & temperature are read once and printed in main-loop */
     if (GPIO_Pin == BUTTON_INT_Pin)
     {
@@ -497,11 +668,14 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
         MAX30100_read_temperature(&heartrate_sensor);
         data_received = true;
     }
+#endif
 
+    /* NOTE Button press refactored for Display GPIO Output */
     if (GPIO_Pin == HR_INT_Pin)
     {
         uint8_t interrupt_status = MAX30100_read_interrupts(&heartrate_sensor);
-#ifdef DEBUG
+#ifdef PRINT_INTERRUPT_STATUS
+        // Print Interrupt status to UART in debug mode (will be printed alot!)
         char interrupt_message[23]; // 15 chars + 1 * 8 bit number = 23
         sprintf(interrupt_message, "Interrupt: 0x%x\r\n", interrupt_status);
         uart_transmit(interrupt_message);
@@ -537,26 +711,27 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     }
 }
 
+/* NOTE END of Heartrate code */
+
+/* NOTE START of Helper code */
+
+// Timer Callback function - used for executing non-blocking callbacks
+/* NOTE Timer configuration
+ * Timer is configured with a Prescaler of 1 and Counter of 39999
+ * With a clock at 80MHz, this results in a 1000Hz output, which is 1ms
+ */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    __NOP();
+#ifdef DEBUG
+    __NOP(); // To set a breakpoint here
+#endif
     if (htim == &htim16)
     {
         // Stop the timer
         HAL_TIM_Base_Stop_IT(&htim16);
-        // Execute global callback if not NULL
+        // Execute global callback function (set by caller)
         (*callback)();
     }
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    __NOP(); // To be able to debug here with breakpoints
-}
-
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-{
-    __NOP(); // To be able to debug here with breakpoints
 }
 
 void _tim_timeout_nonblocking_with_callback(unsigned int ms, CB cb)
@@ -609,6 +784,8 @@ void uart_dev_log(char *log)
         led_error_blink();
     }
 }
+
+// Checks the initialization error code and prints appropriate message on UART
 void check_init_error(INIT_STATUS init_status)
 {
     switch (init_status) // Check & Handle init_status of initialization
@@ -649,29 +826,21 @@ void check_init_error(INIT_STATUS init_status)
     }
 }
 
-void led_blue_blink()
-{
-    HAL_GPIO_WritePin(RGB_BLUE_GPIO_Port, RGB_BLUE_Pin, GPIO_PIN_RESET);
-    _tim_timeout_nonblocking_with_callback(1000, led_reset);
-}
-
-void led_green_blink()
-{
-    HAL_GPIO_WritePin(RGB_GREEN_GPIO_Port, RGB_GREEN_Pin, GPIO_PIN_RESET);
-    _tim_timeout_nonblocking_with_callback(1000, led_reset);
-}
-
-// Error blinking is yellow - something went wrong, but rest is ok
+// Error blinking is yellow - something went wrong on UART
 void led_error_blink()
 {
     HAL_GPIO_WritePin(GPIOA, RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_RESET); // RED + GREEN = YELLOW
     _tim_timeout_nonblocking_with_callback(1000, led_reset);
 }
 
+// Reset all RGB colors on RGB LED
 void led_reset()
 {
     HAL_GPIO_WritePin(GPIOA, RGB_BLUE_Pin | RGB_RED_Pin | RGB_GREEN_Pin, GPIO_PIN_SET);
 }
+
+/* NOTE END of Helper Code */
+
 /* USER CODE END 4 */
 
 /**
@@ -686,15 +855,7 @@ void Error_Handler(void)
     while (1)
     {
         led_reset();
-        // Blink RED RGB 5 times on terrible error
-        for (int i = 0; i < 5; i++)
-        {
-            HAL_GPIO_WritePin(GPIOA, RGB_RED_Pin, GPIO_PIN_RESET);
-            for (int i = 0; i < APPROX_1_SEC; i++)
-                ; // Approximately delaying for 1 second
-            led_reset();
-        }
-        break;
+        HAL_GPIO_WritePin(GPIOA, RGB_RED_Pin, GPIO_PIN_RESET); // System is in fault state
     }
     /* USER CODE END Error_Handler_Debug */
 }

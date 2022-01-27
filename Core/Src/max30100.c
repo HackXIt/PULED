@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:21:13 PM GMT+1
  * Last edited:
- *   January 27, 2022, 9:48:09 AM GMT+1
+ *   January 27, 2022, 8:46:46 PM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -73,10 +73,10 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
     /* NOTE SPO2 configuration MAX30100 */
     data = 0x00;
 #ifdef HR_ONLY_MODE // NOTE HERE one can configure sample rate & pulse width of HR_ONLY_MODE
-    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_400);
+    data |= (SPO2_SR & SAMPLE_RATE_50) | (LED_PW & PULSE_WIDTH_400);
 #endif
 #ifdef SPO2_MODE // NOTE HERE one can configure sample rate & pulse width of SPO2_MODE
-    data |= (SPO2_SR & SAMPLE_RATE_100) | (LED_PW & PULSE_WIDTH_400);
+    data |= (SPO2_SR & SAMPLE_RATE_50) | (LED_PW & PULSE_WIDTH_400);
 #endif
     status = MAX30100_write_register(sensor, SPO2_CONFIG, &data);
     if (status != HAL_OK)
@@ -106,7 +106,7 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
 
     /* NOTE LED configuration MAX30100 */
     data = 0x00;
-    data |= (RED_PA & (PA_40 << 4)) | (IR_PA & (PA_40)); // IR_PA & RED_PA = 40.2mA => 0xCC
+    data |= (RED_PA & (PA_0 << 4)) | (IR_PA & (PA_40)); // IR_PA & RED_PA = 40.2mA => 0xCC
     status = MAX30100_write_register(sensor, LED_CONFIG, &data);
     if (status != HAL_OK)
         return LED_CONFIG_FAILED;
@@ -132,30 +132,30 @@ HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor)
     uint8_t data = MODE_TEMP_EN;
     status[0] = MAX30100_write_register(sensor, MODE_CONFIG, &data); // Initiate temperature reading
     uint8_t retry_counter = 0;
-    // do // Wait for temperature reading to be ready
-    // {
-    //     // Using status[3] since an error in temperature reading is more important and therefor prioritized
-    //     // Read interrupt status flag
-    status[3] = MAX30100_read_register(sensor, MODE_CONFIG, &temp_done);
-    //     // Increment error counter
-    //     retry_counter++;
-    //     // Ignore all bits other than TEMP_READY
-    //     temp_done &= MODE_TEMP_EN;
-    //     // Loop until temperature is ready or retried 20 times in total
-    // } while (temp_done && retry_counter <= MAX_RETRY); /* NOTE temp_done == 0 when temperature is ready (a bit counter-intuitive) */
+    do // Wait for temperature reading to be ready
+    {
+        // Using status[3] since an error in temperature reading is more important and therefor prioritized
+        // Read interrupt status flag
+        status[3] = MAX30100_read_register(sensor, MODE_CONFIG, &temp_done);
+        // Increment error counter
+        retry_counter++;
+        // Ignore all bits other than TEMP_READY
+        temp_done &= MODE_TEMP_EN;
+        // Loop until temperature is ready or retried 20 times in total
+    } while (temp_done && retry_counter <= MAX_RETRY);                      /* NOTE temp_done == 0 when temperature is ready (a bit counter-intuitive) */
     status[1] = MAX30100_read_register(sensor, TEMP_INTEGER, &temperature); /* removed (uint8_t *) */
     status[2] = MAX30100_read_register(sensor, TEMP_FRACTION, &fraction);
     fraction &= 0x07; // Ignoring all other fraction bits, if wrongly set.
-    // sensor->temperature = (float)temperature + (fraction * 0.0625);
+    sensor->temperature = (float)temperature + (fraction * 0.0625);
     // Check if there were errors, otherwise return HAL_OK
-    // for (int i = 0; i < 4; i++)
-    // {
-    //     if (status[i] != HAL_OK)
-    //     {
-    //         return status[i]; // Will return the first error that occured
-    //         /* NOTE When an error occured, the returned status could be used to discard the reading */
-    //     }
-    // }
+    for (int i = 0; i < 4; i++)
+    {
+        if (status[i] != HAL_OK)
+        {
+            return status[i]; // Will return the first error that occured
+            /* NOTE When an error occured, the returned status could be used to discard the reading */
+        }
+    }
     return HAL_OK; // No errors above, so we can return HAL_OK
 }
 HAL_StatusTypeDef MAX30100_read_samples(MAX30100 *sensor)
