@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:20:44 PM GMT+1
  * Last edited:
- *   January 27, 2022, 4:53:48 AM GMT+1
+ *   January 27, 2022, 9:48:46 AM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -23,7 +23,9 @@
 /* NOTE Activate "Heartrate only mode" or "SpO2 Mode"
  * Does not affect the sample rate or pulse width!
  */
-/* FIXME Currently only heartrate only mode is working, dunno why, temperature just won't work */
+/* FIXME Currently only heartrate only mode is working, dunno why, temperature just won't work
+ * Also SpO2 generally doesn't work, even when ignoring temperature, the LED just doesn't turn on.
+ */
 #define HR_ONLY_MODE
 // #define SPO2_MODE
 // #define TEMP_ONLY_MODE

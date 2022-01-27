@@ -4,7 +4,7 @@
  * Created:
  *   January 25, 2022, 7:21:13 PM GMT+1
  * Last edited:
- *   January 27, 2022, 4:50:12 AM GMT+1
+ *   January 27, 2022, 9:48:09 AM GMT+1
  * Auto updated?
  *   Yes
  *
@@ -117,11 +117,17 @@ INIT_STATUS MAX30100_initialize(MAX30100 *sensor, I2C_HandleTypeDef *i2c_handle)
 
 /* -------- DATA ACQUISITION --------  */
 
+/* FIXME WHY WON'T YOU WORK?!?! */
 HAL_StatusTypeDef MAX30100_read_temperature(MAX30100 *sensor)
 {
+    /* NOTE For some unknown reason to me, I don't get ANY reasonable value back from the IC
+     * Sometimes I even land in the hardware-fault after executing this
+     * Maybe float is not so good here?
+     * Anyways... this sucks
+     */
     HAL_StatusTypeDef status[4];
     uint8_t temp_done = 0x00;
-    uint8_t temperature = 0x00;
+    uint8_t temperature = 0x00; /* NOTE removed int8_t (which would actually be appropriate since value is 2's complement */
     uint8_t fraction = 0x00;
     uint8_t data = MODE_TEMP_EN;
     status[0] = MAX30100_write_register(sensor, MODE_CONFIG, &data); // Initiate temperature reading
