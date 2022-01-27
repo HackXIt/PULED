@@ -69,7 +69,7 @@
 // #define TRIGGER_ON_TEMP
 
 /* NOTE Activate/Deactivate debugging message */
-// #define DEBUG
+#define DEBUG
 
 /* NOTE Activate/Deactivate printing interrupt status to UART */
 // #define PRINT_INTERRUPT_STATUS
@@ -91,8 +91,10 @@ UART_HandleTypeDef huart2;
 MAX30100 heartrate_sensor;
 uint8_t init_status = 0x00;
 uint8_t current_status = 0x00;
-uint32_t sum_samples = 0x00000000;
-uint32_t total_avg = 0x00000000;
+uint32_t sum = 0x00000000;
+uint16_t avg = 0x0000;
+uint32_t total_sum = 0x00000000;
+uint16_t total_avg = 0x00000000;
 uint8_t sample_counter = 0x00;
 bool data_received = false;
 bool finger_request = false;
@@ -231,7 +233,7 @@ int main(void)
         char retry_message[24]; // Length of "Retry-Attempt xx...\r\n" +1 (or +3 ???)
         do
         {
-            sprintf(retry_message, "Retry-Attempt %d...\r\n", retry_counter);
+            sprintf(retry_message, "Retry-Attempt %1u...\r\n", retry_counter);
             uart_transmit(retry_message);
             init_status = MAX30100_initialize(&heartrate_sensor, &hi2c1);
             retry_counter += (init_status != HAL_OK);
@@ -250,14 +252,15 @@ int main(void)
     {
         if (data_received)
         {
-            uint32_t sum = 0;
+            sum = 0;
+            avg = 0;
             for (int i = 0; i < MAX_SAMPLES; i++)
             {
 #ifdef DEBUG // Print full sample output on UART in debug mode (for first sample)
                 if (i == 0)
                 {
                     char heartrate_message[MSG_BUFFER]; // 22 chars + 2 * 16 bit number + ???
-                    sprintf(heartrate_message, "HR: %d - O2: %d - Temp: %f\r\n",
+                    sprintf(heartrate_message, "HR: %hu - O2: %hu - Temp: %f\r\n",
                             heartrate_sensor.IR_data[i],
                             heartrate_sensor.RED_data[i],
                             heartrate_sensor.temperature);
@@ -266,7 +269,7 @@ int main(void)
 #endif
                 sum += heartrate_sensor.IR_data[i]; // Calculate sum of sample-memory-bank
             }
-            uint16_t avg = sum / MAX_SAMPLES; // Calculate average of samples
+            avg = sum / MAX_SAMPLES; // Calculate average of samples
             if (avg > MINIMUM_VIABLE_MEASUREMENT)
             {
                 if (!measure_msg) // Check if "Measuring..." was already written
@@ -280,7 +283,7 @@ int main(void)
                     measure_msg = true;
                     __NVIC_EnableIRQ(EXTI9_5_IRQn);
                 }
-                sum_samples += sum;
+                total_sum += sum;
                 sample_counter += MAX_SAMPLES;
                 /* NOTE We could have gone the alternate way of updating the AVG continously, but meh */
                 if ((sample_counter / MAX_SAMPLES) >= MAX_SAMPLES - 1) // Check if we reached maximum number of samples for good AVG
@@ -291,11 +294,11 @@ int main(void)
                     finger_request = false;
                     oledc_fill_screen(0);
                     oledc_set_font(&guiFont_Tahoma_14_Regular[0], 0xFFFF);
-                    total_avg = sum_samples / sample_counter;
+                    total_avg = total_sum / sample_counter;
                     char avg_value_text[sizeof(total_avg)];
-                    sprintf(avg_value_text, "%lu", total_avg);
+                    sprintf(avg_value_text, "%hu", total_avg);
                     oledc_text_two_lines("HR AVG:", avg_value_text);
-                    sum_samples = 0;
+                    total_sum = 0;
                     sample_counter = 0;
                     HAL_Delay(3000);
                     __NVIC_EnableIRQ(EXTI9_5_IRQn);
@@ -688,7 +691,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
             // HAL_Status is ignored because we're reading only 1 sample and it will happen 100 times per second
             MAX30100_read_sample(&heartrate_sensor);
             char sample_message[43]; // 11 chars + 2 * 16 bit number = 43
-            sprintf(sample_message, "HR: %d O2: %d\r\n",
+            sprintf(sample_message, "HR: %hu O2: %hu\r\n",
                     heartrate_sensor.hr_sample,
                     heartrate_sensor.spo2_sample);
             uart_transmit(sample_message);
