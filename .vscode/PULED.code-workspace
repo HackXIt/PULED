@@ -1,0 +1,19 @@
+{
+    "folders": [
+        {
+            "path": ".."
+        }
+    ],
+    "remoteAuthority": "wsl+Debian",
+    "settings": {
+        "cortex-debug.gdbPath": "/usr/bin/gdb-multiarch",
+        "files.associations": {
+            "heartrate1_hw.h": "c",
+            "heartrate1_hal.h": "c",
+            "cmath": "c",
+            "protocol.h": "c",
+            "limits": "c",
+            "*.tcc": "c"
+        }
+    }
+}

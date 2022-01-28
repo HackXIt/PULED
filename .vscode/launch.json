@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "WSL2-USB",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "stutil",
+            "device": "STM32L432KC",
+            "interface": "swd",
+            "serverpath": "/usr/bin/st-util",
+            "executable": "${workspaceFolder}/build/arm_firmware.elf",
+            "svdFile": "${env:HOME}/git-stash/cmsis-svd/data/STMicro/STM32L4x2.svd",
+            "runToEntryPoint": "main",
+            "armToolchainPath": "/usr/bin/",
+            "postLaunchCommands": [
+                "monitor halt",
+                "monitor reset"
+            ],
+            "showDevDebugOutput": false,
+        },
+        {
+            "name": "WSL2-External",
+            "cwd": "${workspaceFolder}",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "external",
+            "gdbTarget": "${env:WSL_HOST_IP}:4242",
+            "executable": "${workspaceFolder}/build/arm_firmware.elf",
+            "svdFile": "${env:HOME}/git-stash/cmsis-svd/data/STMicro/STM32L4x2.svd",
+            "runToEntryPoint": "main",
+            "armToolchainPath": "/usr/bin/",
+            "preLaunchTask": "launch ST-Link",
+            "postDebugTask": "postDebugKill",
+            "postLaunchCommands": [
+                "monitor halt",
+                "monitor reset"
+            ],
+        }
+    ]
+}

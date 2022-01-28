@@ -1,5 +1,8 @@
 # RINI Dev Environment
-.vscode
+.vscode/.history
+.vscode/*.db*
+.vscode/*.log
+.vscode/.cortex-debug*
 build
 Drivers
 .mxproject
